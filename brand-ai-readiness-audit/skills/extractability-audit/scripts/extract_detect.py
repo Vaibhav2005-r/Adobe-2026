@@ -14,11 +14,11 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-import extruct  # noqa: E402
 import trafilatura  # noqa: E402
 from selectolax.parser import HTMLParser  # noqa: E402
 
 from brand_audit.facts import extract_facts, normalize_currency_value  # noqa: E402
+from brand_audit.jsonld import extract_json_ld, walk  # noqa: E402
 from brand_audit.models import (  # noqa: E402
     Artifact,
     Confidence,
@@ -48,23 +48,6 @@ def _load_schema_subset() -> dict:
     return json.loads(_SCHEMA_SUBSET_PATH.read_text(encoding="utf-8"))
 
 
-def _extract_json_ld(html: str) -> list[dict]:
-    data = extruct.extract(html, syntaxes=["json-ld"])
-    return [block for block in data.get("json-ld", []) if isinstance(block, dict)]
-
-
-def _walk(node, *, key: str | None = None):
-    """Yield every dict in a JSON-LD tree, depth-first, regardless of
-    nesting -- an Offer can appear top-level or nested inside a Product."""
-    if isinstance(node, dict):
-        yield node
-        for v in node.values():
-            yield from _walk(v)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _walk(item)
-
-
 def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
     """EXTRACT-001: JSON-LD claims a price the visible text doesn't
     corroborate. Normalizes both sides to a float before comparing --
@@ -73,7 +56,7 @@ def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
     which would fail this detector's own zero-false-positives bar on the
     very first well-formed page it saw."""
     findings: list[Finding] = []
-    blocks = _extract_json_ld(html)
+    blocks = extract_json_ld(html)
     if not blocks:
         return []
 
@@ -84,7 +67,7 @@ def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
 
     seen_prices: set[float] = set()
     for root in blocks:
-        for node in _walk(root):
+        for node in walk(root):
             price = node.get("price")
             if price is None:
                 continue
@@ -145,7 +128,7 @@ def detect_missing_required_properties(url: str, html: str) -> list[Finding]:
     that type needs to be useful to a consumer."""
     schema_subset = _load_schema_subset()
     findings: list[Finding] = []
-    for block in _extract_json_ld(html):
+    for block in extract_json_ld(html):
         types = block.get("@type")
         types = types if isinstance(types, list) else [types]
         for t in types:
@@ -217,13 +200,21 @@ def detect_heading_hierarchy_issues(url: str, html: str) -> list[Finding]:
     same reasoning EXTRACT-001 already applies to its visible-text side.
     """
     tree = HTMLParser(_main_content_html(html))
-    # A single combined selector, not one query per level: querying "h1"
-    # then "h2" etc. separately and concatenating would lose DOM order
-    # (all h1s before all h2s, regardless of where they actually sit in
-    # the page), which is exactly the ordering this detector needs.
+    # tree.iter(), not tree.css("h1, h2, ..."): a grouped CSS selector in
+    # selectolax returns all matches of the first selector in the group,
+    # then the second, and so on -- concatenated per-tag, not merged
+    # into document order (confirmed directly; see
+    # src/brand_audit/chunk.py's _extract_segments docstring, which hit
+    # the same bug harder and traced it). For level-skip detection,
+    # order is the entire point -- this was a latent correctness bug
+    # that happened not to produce a wrong verdict on anything tested so
+    # far only because every test/real-page case checked against had
+    # headings whose tag-grouped order was indistinguishable from their
+    # true document order.
     ordered = [
         (int(node.tag[1]), (node.text() or "").strip()[:60])
-        for node in tree.css("h1, h2, h3, h4, h5, h6")
+        for node in (tree.body.iter() if tree.body else [])
+        if node.tag in ("h1", "h2", "h3", "h4", "h5", "h6")
     ]
 
     h1_count = sum(1 for level, _ in ordered if level == 1)
