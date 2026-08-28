@@ -169,3 +169,36 @@ def test_sitemap_health_none_declared_is_silent():
     robots = _robots("User-agent: *\nAllow: /")
     findings = reach_detect.detect_sitemap_health("https://example.com", robots, sitemap_reachable=False)
     assert findings == []
+
+
+# --- WAF contradicts robots.txt (REACH-007) --------------------------------
+# Found on a real site during Day 6's wild-corpus validation, not
+# hypothesized: allbirds.com's robots.txt is a standard, permissive
+# Shopify robots.txt with no rule blocking the sampled URLs, yet every
+# one of them returned HTTP 403 for this project's own declared UA.
+
+def test_waf_contradicts_robots_flagged_when_all_allowed_urls_blocked():
+    outcomes = [_outcome(f"https://example.com/p{i}", 403) for i in range(5)]
+    findings = reach_detect.detect_waf_contradicts_robots("https://example.com", outcomes)
+    assert len(findings) == 1
+    assert findings[0].taxonomy_id == "REACH-007"
+    assert findings[0].severity == "critical"
+
+
+def test_waf_contradicts_robots_silent_when_most_allowed_urls_succeed():
+    outcomes = [_outcome(f"https://example.com/p{i}", 200) for i in range(4)] + [_outcome("https://example.com/p4", 403)]
+    findings = reach_detect.detect_waf_contradicts_robots("https://example.com", outcomes)
+    assert findings == []
+
+
+def test_waf_contradicts_robots_silent_when_no_outcomes():
+    assert reach_detect.detect_waf_contradicts_robots("https://example.com", []) == []
+
+
+def test_waf_contradicts_robots_ignores_failed_fetches():
+    # A record=None (network error, not a block-shaped status) shouldn't
+    # count toward the blocked fraction.
+    outcomes = [_outcome(f"https://example.com/p{i}", 200) for i in range(4)]
+    outcomes.append(FetchOutcome(url="https://example.com/p4", record=None, error="connection reset"))
+    findings = reach_detect.detect_waf_contradicts_robots("https://example.com", outcomes)
+    assert findings == []

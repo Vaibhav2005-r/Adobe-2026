@@ -225,18 +225,21 @@ def test_clean_product_fixture_has_zero_false_positives(tmp_path):
     # positives on controls." Matching price, complete required
     # properties, correct heading hierarchy, alt text present.
     #
-    # Scoped to non-RETRIEVE findings: this fixture certifies EXTRACT-
-    # stage cleanliness specifically (that's what Day 4's DoD is about),
-    # not comprehensive answerability across all 18 RETRIEVE-stage
-    # buyer-intent queries -- a single product page was never going to
-    # address comparison/trust-intent queries, and a RETRIEVE-stage
-    # finding here is expected, not an EXTRACT false positive.
+    # Scoped to EXTRACT findings only, via an inclusion list: this
+    # fixture certifies EXTRACT-stage cleanliness specifically (that's
+    # what Day 4's DoD is about), not comprehensive answerability across
+    # all 18 RETRIEVE-stage buyer-intent queries or CITE-stage entity
+    # anchoring -- a single product page with no sameAs was never going
+    # to satisfy either, and a finding from those stages here is
+    # expected, not an EXTRACT false positive. An inclusion list (not an
+    # exclusion list) so a future new stage doesn't require editing this
+    # test again.
     server = _serve("schema-clean-product", 8128)
     try:
         report = run_audit("http://localhost:8128", tmp_path / "run")
     finally:
         server.shutdown()
 
-    non_retrieve_findings = [f for f in report["findings"] if f["stage"] != "retrieve"]
-    assert non_retrieve_findings == []
+    extract_findings = [f for f in report["findings"] if f["stage"] == "extract"]
+    assert extract_findings == []
     assert report["summary"]["ai_readiness"]["extract"] == "pass"

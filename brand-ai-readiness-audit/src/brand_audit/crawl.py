@@ -135,6 +135,33 @@ async def discover_sitemap_urls(
     return urls[:max_urls], sitemap_fetch_ok
 
 
+def find_homepage_url(urls, hint_url: str | None = None) -> str | None:
+    """Which of `urls` (any iterable, typically a crawled-pages dict's
+    keys) is actually the homepage -- matched by normalized root path
+    (`""`/`"/"`), not exact string equality against `hint_url`.
+
+    Exact-equality was the first implementation's bug (retrieval-
+    simulation's entity detection, Day 5): the CLI's site argument
+    ("https://example.com") essentially never byte-for-byte matches a
+    real crawled URL, which always carries whatever path/trailing-slash
+    the sitemap or crawl happened to produce ("https://example.com/").
+    Confirmed against a real site (docs.python.org) before this helper
+    existed as a shared function -- see docs/progress.md Day 5. Kept
+    here, not duplicated a third time, once trust-corroboration-audit
+    needed the same lookup for its own homepage-scoped checks (Day 6).
+
+    Returns `hint_url` itself if it happens to be an exact match (cheap
+    win, no reason not to take it), else the alphabetically-first
+    root-path URL, else None if nothing in `urls` looks like a
+    homepage at all.
+    """
+    url_set = set(urls)
+    if hint_url in url_set:
+        return hint_url
+    root_urls = sorted(u for u in url_set if urlparse(u).path in ("", "/"))
+    return root_urls[0] if root_urls else None
+
+
 def sample_seed_for(domain: str) -> str:
     """Deterministic, time-independent seed -- same site always hashes to
     the same value, so the sample (and therefore the whole report) is

@@ -13,5 +13,6 @@ for p in [
     REPO_ROOT / "skills" / "render-gap-audit" / "scripts",
     REPO_ROOT / "skills" / "extractability-audit" / "scripts",
     REPO_ROOT / "skills" / "retrieval-simulation" / "scripts",
+    REPO_ROOT / "skills" / "trust-corroboration-audit" / "scripts",
 ]:
     sys.path.insert(0, str(p))

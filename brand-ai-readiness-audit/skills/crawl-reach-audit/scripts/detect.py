@@ -279,6 +279,71 @@ def detect_waf_block(site: str, waf_probe: dict[str, FetchOutcome], robots: Robo
     ]
 
 
+_BLOCKED_LIKE_STATUSES = {403, 429, 503}
+
+
+def detect_waf_contradicts_robots(site: str, allowed_outcomes: list[FetchOutcome]) -> list[Finding]:
+    """REACH-007: robots.txt explicitly *allows* these paths (they
+    already passed the crawler's own permission check before being
+    fetched at all), but fetching them still returns a block-shaped
+    status (403/429/503) -- an infrastructure layer (WAF/bot-management)
+    contradicting the site's own declared policy. Distinct from
+    REACH-003, which requires robots.txt to be unreadable in the first
+    place; this is the site telling a crawler "you're welcome here" and
+    then blocking it anyway.
+
+    Found on a real site, not hypothesized: a wild-corpus validation run
+    against allbirds.com hit this exactly -- robots.txt is a standard,
+    permissive Shopify robots.txt with no rule blocking the sampled
+    product/page URLs, yet every one of them returned HTTP 403 for this
+    project's own declared crawler UA.
+    """
+    if not allowed_outcomes:
+        return []
+    blocked = [o for o in allowed_outcomes if o.record is not None and o.record.http_status in _BLOCKED_LIKE_STATUSES]
+    if len(blocked) / len(allowed_outcomes) < 0.8:
+        return []  # a handful of isolated 403s isn't a policy contradiction -- most of the allowed sample needs to be blocked
+
+    confidence = Confidence.HIGH
+    severity = compute_severity(Stage.REACH, BlastRadius.SITE_WIDE, confidence)
+    sample_status = blocked[0].record.http_status
+    return [
+        Finding(
+            id=_next_id(),
+            title=f"robots.txt allows these pages, but {len(blocked)}/{len(allowed_outcomes)} still return HTTP {sample_status}",
+            severity=severity,
+            stage=Stage.REACH,
+            taxonomy_id="REACH-007",
+            scope=Scope(checked=len(allowed_outcomes), affected=len(blocked)),
+            evidence="; ".join(f"{o.url} -> {o.record.http_status}" for o in blocked[:5]),
+            artifacts=[Artifact(url=o.url, http_status=o.record.http_status) for o in blocked[:3]],
+            confidence=confidence,
+            verification=_unverified(),
+            impact_mechanism=(
+                "robots.txt is the crawler's contract with the site -- a compliant AI crawler checks "
+                "it, sees these paths allowed, and proceeds in good faith. An infrastructure layer "
+                "blocking the fetch anyway means the declared policy is misleading: robots.txt says "
+                "'crawl me' while the site's actual behavior says 'not you.'"
+            ),
+            affected_queries=[],
+            suggested_action=SuggestedAction(
+                summary="Align the WAF/bot-management allowlist with the declared robots.txt policy, or update robots.txt to reflect what's actually blocked.",
+                priority=severity,
+                impact="high",
+                effort="medium",
+                confidence=confidence,
+                stage_unblocked=Stage.REACH,
+                implementation=[
+                    "Add documented AI-crawler UAs to the WAF allowlist for paths robots.txt already permits",
+                    "Alternatively, add explicit Disallow rules for paths that are actually blocked, so crawlers don't waste budget on them",
+                ],
+                verification_step=f"curl -I -A ClaudeBot {allowed_outcomes[0].url} -- should not return {sample_status}",
+                rationale_ref="references/taxonomy.md#reach-007",
+            ),
+        )
+    ]
+
+
 _NOT_FOUND_RE = re.compile(r"\b(page not found|404 error|doesn.t exist|cannot be found|no longer available)\b", re.IGNORECASE)
 
 

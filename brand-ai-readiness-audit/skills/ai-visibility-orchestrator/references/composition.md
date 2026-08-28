@@ -65,8 +65,8 @@ checklist.
 ① crawl-reach-audit        (implemented: crawl core + 6 detectors)
 ② render-gap-audit         (implemented: dual-fetch differential)
 ③ extractability-audit     (implemented: 4 detectors)
-④ retrieval-simulation     (implemented: chunking, BM25, answerability matrix)
-⑤ trust-corroboration-audit (not yet wired up)
+④ retrieval-simulation     (implemented: chunking, BM25, answerability matrix, orphan-fact/cross-page-join/boilerplate)
+⑤ trust-corroboration-audit (implemented: entity anchoring, staleness, description drift, attribution density)
 ⑥ arrival-engagement-audit (not yet wired up)
 ✗ finding-verification     (cross-cutting, runs after ①-⑥, not yet wired up)
 ```
