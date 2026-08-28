@@ -224,11 +224,19 @@ def test_clean_product_fixture_has_zero_false_positives(tmp_path):
     # The Day 4 DoD, verbatim: "contradiction detector has zero false
     # positives on controls." Matching price, complete required
     # properties, correct heading hierarchy, alt text present.
+    #
+    # Scoped to non-RETRIEVE findings: this fixture certifies EXTRACT-
+    # stage cleanliness specifically (that's what Day 4's DoD is about),
+    # not comprehensive answerability across all 18 RETRIEVE-stage
+    # buyer-intent queries -- a single product page was never going to
+    # address comparison/trust-intent queries, and a RETRIEVE-stage
+    # finding here is expected, not an EXTRACT false positive.
     server = _serve("schema-clean-product", 8128)
     try:
         report = run_audit("http://localhost:8128", tmp_path / "run")
     finally:
         server.shutdown()
 
-    assert report["findings"] == []
+    non_retrieve_findings = [f for f in report["findings"] if f["stage"] != "retrieve"]
+    assert non_retrieve_findings == []
     assert report["summary"]["ai_readiness"]["extract"] == "pass"

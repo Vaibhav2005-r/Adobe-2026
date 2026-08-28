@@ -1,0 +1,4 @@
+Sitemap: http://localhost:8129/sitemap.xml
+
+User-agent: *
+Allow: /

@@ -1,7 +1,12 @@
 """End-to-end smoke test: run_audit.py against the clean-control fixture,
-end-to-end, and assert the report is schema-valid, has zero findings (the
-clean control has no injected defects), and is byte-identical across two
-runs modulo `audited_at` / `duration_s` (the determinism proof).
+end-to-end, and assert the report is schema-valid, has zero REACH/
+RENDER/EXTRACT findings (the clean control has no injected defects for
+those stages -- it was never built to comprehensively answer all 18
+RETRIEVE-stage buyer-intent queries, so a RETRIEVE finding here is
+expected, not a regression; see tests/fixtures/retrieval-answerable for
+the fixture that actually exercises answerability), and is byte-identical
+across two runs modulo `audited_at` / `duration_s` (the determinism
+proof).
 
 No live network access required -- serves tests/fixtures/clean-control
 over a local http.server, matching how a judge running this offline
@@ -63,10 +68,14 @@ def run_audit(site: str, run_dir: Path, *extra_args: str) -> dict:
 
 def test_clean_control_produces_zero_findings(fixture_server, tmp_path):
     report = run_audit(fixture_server, tmp_path / "run1")
-    assert report["findings"] == []
+    non_retrieve_findings = [f for f in report["findings"] if f["stage"] != "retrieve"]
+    assert non_retrieve_findings == []
     assert report["run_manifest"]["pages_crawled"] >= 1
-    assert report["summary"]["total_findings"] == 0
     assert report["summary"]["ai_readiness"]["reach"] == "pass"
+    assert report["summary"]["ai_readiness"]["extract"] == "pass"
+    # RETRIEVE did run and produced a real matrix -- just not asserting
+    # it's all-answerable, since this fixture was never built for that.
+    assert len(report["answerability_matrix"]) == 18
 
     if PLAYWRIGHT_AVAILABLE:
         assert report["summary"]["ai_readiness"]["render"] == "pass"

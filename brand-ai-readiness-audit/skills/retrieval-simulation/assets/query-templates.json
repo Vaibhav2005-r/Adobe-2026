@@ -1,0 +1,33 @@
+{
+  "_comment": "6 intent classes x 3 templates = 18 queries per audit, matching docs/build-plan.md Part 5's own report-schema example ('5 of 18 buyer-intent queries are UNANSWERABLE'). {brand} and {category} are filled in deterministically from the detected entity (see retrieve_detect.detect_entity) -- never free-form LLM generation, so the query set is reproducible.",
+  "identity": [
+    "What is {brand}?",
+    "What does {brand} do?",
+    "Tell me about {brand}"
+  ],
+  "pricing": [
+    "How much does {brand} cost?",
+    "What are {brand}'s prices?",
+    "What is the price of {brand}'s {category}?"
+  ],
+  "comparison": [
+    "How does {brand} compare to competitors?",
+    "What makes {brand} different from other {category} options?",
+    "Is {brand} better than alternatives?"
+  ],
+  "capability": [
+    "What features does {brand} offer?",
+    "What can {brand}'s {category} do?",
+    "What are the specifications of {brand}'s {category}?"
+  ],
+  "trust": [
+    "Is {brand} a legitimate company?",
+    "What do customers say about {brand}?",
+    "Are there reviews of {brand}?"
+  ],
+  "contact": [
+    "How do I contact {brand}?",
+    "Where is {brand} located?",
+    "What is {brand}'s customer support?"
+  ]
+}

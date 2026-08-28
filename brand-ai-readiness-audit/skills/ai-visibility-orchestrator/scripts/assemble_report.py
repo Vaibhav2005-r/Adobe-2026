@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from brand_audit.models import (  # noqa: E402
     AIReadiness,
+    AnswerabilityMatrixEntry,
+    AnswerabilityOutcome,
     AnswerabilitySummary,
     AuditReport,
     ReadinessStatus,
@@ -68,9 +70,11 @@ def assemble_report(
     pages_rendered: int,
     degradations: list[str],
     observations: list = None,
+    answerability_matrix: list[AnswerabilityMatrixEntry] = None,
 ) -> AuditReport:
     findings = [f for r in stage_results for f in r.findings]
     observations = observations or []
+    answerability_matrix = answerability_matrix or []
 
     severity_counts = {s: 0 for s in Severity}
     for f in findings:
@@ -93,6 +97,10 @@ def assemble_report(
         else min(findings, key=lambda f: _SEVERITY_RANK[f.severity]).title
     )
 
+    answerability_counts = {o: 0 for o in AnswerabilityOutcome}
+    for entry in answerability_matrix:
+        answerability_counts[entry.outcome] += 1
+
     summary = Summary(
         total_findings=len(findings),
         critical=severity_counts[Severity.CRITICAL],
@@ -100,7 +108,12 @@ def assemble_report(
         medium=severity_counts[Severity.MEDIUM],
         low=severity_counts[Severity.LOW],
         ai_readiness=ai_readiness,
-        answerability=AnswerabilitySummary(),
+        answerability=AnswerabilitySummary(
+            answerable=answerability_counts[AnswerabilityOutcome.ANSWERABLE],
+            partial=answerability_counts[AnswerabilityOutcome.PARTIAL],
+            ungrounded=answerability_counts[AnswerabilityOutcome.UNGROUNDED],
+            unretrievable=answerability_counts[AnswerabilityOutcome.UNRETRIEVABLE],
+        ),
         headline=headline,
     )
 
@@ -123,5 +136,5 @@ def assemble_report(
         findings=findings,
         observations=observations,
         proactive_recommendations=[],
-        answerability_matrix=[],
+        answerability_matrix=answerability_matrix,
     )

@@ -2,10 +2,10 @@
 """Pipeline driver: crawl a site, run whatever stages are wired up, emit a
 schema-valid AuditReport.
 
-Day 4 milestone: stage (1) REACH (crawl-reach-audit), stage (2) RENDER
-(render-gap-audit), and stage (3) EXTRACT (extractability-audit)
-detectors are wired up. Stages (4)-(6) don't exist yet, so their
-ai_readiness field reports "skipped", not "pass".
+Day 5 milestone: stage (1) REACH, stage (2) RENDER, stage (3) EXTRACT,
+and stage (4) RETRIEVE (retrieval-simulation -- chunking, BM25,
+answerability matrix) are wired up. Stages (5)-(6) don't exist yet, so
+their ai_readiness field reports "skipped", not "pass".
 
 Usage:
     python run_audit.py example.com
@@ -30,6 +30,8 @@ _RENDER_SCRIPTS = Path(__file__).resolve().parents[2] / "render-gap-audit" / "sc
 sys.path.insert(0, str(_RENDER_SCRIPTS))
 _EXTRACT_SCRIPTS = Path(__file__).resolve().parents[2] / "extractability-audit" / "scripts"
 sys.path.insert(0, str(_EXTRACT_SCRIPTS))
+_RETRIEVE_SCRIPTS = Path(__file__).resolve().parents[2] / "retrieval-simulation" / "scripts"
+sys.path.insert(0, str(_RETRIEVE_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
@@ -206,6 +208,50 @@ def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResu
     )
 
 
+def run_retrieve_stage(
+    reach_corpus_urls: list[str], reach_outcomes: list, render_result: StageResult | None, base_url: str
+) -> tuple[StageResult, list]:
+    """The answerability probe. Composition contract: consumes the
+    stage (1) survivors, minus any page stage (2) proved is an empty
+    JS-only shell -- there's genuinely nothing on such a page for a
+    non-JS-executing retrieval pipeline to chunk, so including it would
+    misrepresent what's actually reachable. Pages RENDER didn't get to
+    (bounded by --max-render-pages) are NOT excluded -- not being
+    checked isn't the same as being proven empty, and shrinking the
+    corpus based on a performance-budget artifact rather than an actual
+    gating failure would misrepresent the corpus size, not narrow it
+    correctly."""
+    import retrieve_detect
+
+    empty_shell_urls = set()
+    if render_result is not None:
+        for f in render_result.findings:
+            if f.taxonomy_id == "RENDER-001" and f.severity == "critical":
+                empty_shell_urls.update(a.url for a in f.artifacts)
+
+    raw_by_url = {o.url: o.record.text for o in reach_outcomes if o.record is not None}
+    pages = {
+        url: raw_by_url[url]
+        for url in reach_corpus_urls
+        if url in raw_by_url and url not in empty_shell_urls
+    }
+
+    matrix, finding, entity = retrieve_detect.run_retrieval_simulation(pages, homepage_url=base_url)
+
+    stage_result = StageResult(
+        stage=Stage.RETRIEVE,
+        findings=[finding] if finding else [],
+        corpus_delta=list(pages),
+        metrics={
+            "pages_indexed": len(pages),
+            "pages_excluded_empty_shell": len(empty_shell_urls),
+            "entity_name": entity.name,
+            "entity_source": entity.source,
+        },
+    )
+    return stage_result, matrix
+
+
 async def main_async(args: argparse.Namespace) -> int:
     site = normalize_site(args.site)
     domain = urlparse(site).netloc
@@ -244,6 +290,7 @@ async def main_async(args: argparse.Namespace) -> int:
     stage_results = [reach_result]
     degradations = list(budget.degradations)
     pages_rendered = 0
+    render_result: StageResult | None = None  # stays None if skipped -- run_retrieve_stage needs to know either way
 
     if args.skip_render:
         degradations.append("render_stage_skipped_by_flag")
@@ -272,6 +319,17 @@ async def main_async(args: argparse.Namespace) -> int:
         extract_result = run_extract_stage(reach_result.corpus_delta, reach_outcomes)
         stage_results.append(extract_result)
 
+    # RETRIEVE is also pure computation (chunking + BM25 are in-memory,
+    # no network) -- same budget-gating rationale as EXTRACT.
+    answerability_matrix = []
+    if budget.over_budget():
+        degradations.append("retrieve_stage_skipped_low_budget")
+    else:
+        retrieve_result, answerability_matrix = run_retrieve_stage(
+            reach_result.corpus_delta, reach_outcomes, render_result, site
+        )
+        stage_results.append(retrieve_result)
+
     duration_s = time.monotonic() - start
 
     report = assemble_report(
@@ -282,6 +340,7 @@ async def main_async(args: argparse.Namespace) -> int:
         pages_crawled=reach_result.metrics["pages_fetched_ok"],  # successfully fetched, not merely attempted
         pages_rendered=pages_rendered,
         degradations=degradations,
+        answerability_matrix=answerability_matrix,
     )
 
     out_path = Path(args.out) if args.out else run_dir / "report.json"

@@ -25,10 +25,18 @@ context (site, budget remaining, sample seed, and the upstream
 
 ## The gating -- why this is genuine composition, not padding
 
-`retrieval-simulation` (stage ④) **only ever sees the `corpus_delta`
-that survived stages ① REACH and ② RENDER.** It never reads the raw
-crawl. This is deliberate and it's the whole point: the same missing
-fact produces a *different* finding depending on where in the funnel it
+`retrieval-simulation` (stage ④) **only ever sees the stage ① REACH
+survivors, minus any page stage ② RENDER proved is an empty JS-only
+shell.** It never reads the raw crawl. (Implementation note: this is
+gated on REACH's `corpus_delta` with RENDER-proven-empty pages removed,
+not literally RENDER's own `corpus_delta` -- RENDER only dual-fetches a
+bounded sample, `--max-render-pages`, for runtime-budget reasons, and a
+page RENDER never got to check isn't the same as one it proved empty.
+Narrowing to RENDER's sampled subset would shrink the corpus based on a
+performance artifact instead of an actual gating failure. See
+`ai-visibility-orchestrator/scripts/run_audit.py::run_retrieve_stage`.)
+This is deliberate and it's the whole point: the same missing fact
+produces a *different* finding depending on where in the funnel it
 actually died --
 
 - If a fact is missing because `robots.txt` blocks the page entirely,
@@ -57,7 +65,7 @@ checklist.
 ① crawl-reach-audit        (implemented: crawl core + 6 detectors)
 ② render-gap-audit         (implemented: dual-fetch differential)
 ③ extractability-audit     (implemented: 4 detectors)
-④ retrieval-simulation     (not yet wired up)
+④ retrieval-simulation     (implemented: chunking, BM25, answerability matrix)
 ⑤ trust-corroboration-audit (not yet wired up)
 ⑥ arrival-engagement-audit (not yet wired up)
 ✗ finding-verification     (cross-cutting, runs after ①-⑥, not yet wired up)
