@@ -54,9 +54,9 @@ checklist.
 ## Pipeline order and current status
 
 ```
-① crawl-reach-audit        (implemented: crawl core only, no detectors)
-② render-gap-audit         (not yet wired up)
-③ extractability-audit     (not yet wired up)
+① crawl-reach-audit        (implemented: crawl core + 6 detectors)
+② render-gap-audit         (implemented: dual-fetch differential)
+③ extractability-audit     (implemented: 4 detectors)
 ④ retrieval-simulation     (not yet wired up)
 ⑤ trust-corroboration-audit (not yet wired up)
 ⑥ arrival-engagement-audit (not yet wired up)

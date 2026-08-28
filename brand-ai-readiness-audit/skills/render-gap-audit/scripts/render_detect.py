@@ -14,7 +14,6 @@ guess. See docs/build-plan.md Part 4 / Part 8.
 
 from __future__ import annotations
 
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 import trafilatura  # noqa: E402
 
+from brand_audit.facts import extract_facts  # noqa: E402
 from brand_audit.models import (  # noqa: E402
     Artifact,
     Confidence,
@@ -47,43 +47,14 @@ def _unverified() -> Verification:
     return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
 
 
-# --- fact extraction -------------------------------------------------
-#
-# Deliberately regex-based, not a real NER model: a full entity extractor
-# would itself need model weights, which the project's own constraints
-# rule out (see docs/build-plan.md Part 4). This covers 4 of the 5 fact
-# types the build plan names (currency, numeric, date, contact) --
-# "entity" extraction is left as documented future work rather than
-# faked with a noisy heuristic.
-
-_CURRENCY_RE = re.compile(r"[$€£₹]\s?\d[\d,]*(?:\.\d+)?")
-_NUMERIC_RE = re.compile(r"\b\d{2,}(?:\.\d+)?%?\b")
-_DATE_RE = re.compile(
-    r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|"
-    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})\b"
-)
-_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
-_PHONE_RE = re.compile(r"\b(?:\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
-
-# Noise: hex-looking tokens (hashes, CSRF tokens, session ids) that a
-# naive numeric/date regex would otherwise pick up as a "fact".
-_HEX_NOISE_RE = re.compile(r"^[a-f0-9]{12,}$", re.IGNORECASE)
-
-
-def extract_facts(text: str, *, today_iso: str | None = None) -> dict[str, set[str]]:
-    facts = {
-        "currency": set(_CURRENCY_RE.findall(text)),
-        "numeric": {n for n in _NUMERIC_RE.findall(text) if not _HEX_NOISE_RE.match(n)},
-        "date": set(_DATE_RE.findall(text)),
-        "contact": set(_EMAIL_RE.findall(text)) | set(_PHONE_RE.findall(text)),
-    }
-    if today_iso:
-        facts["date"].discard(today_iso)  # suppress "generated at" timestamps, not content dates
-    # numeric facts that are substrings of an already-captured currency
-    # fact aren't a separate finding (e.g. "$49" also matching \d{2,})
-    currency_digits = {re.sub(r"[^\d.]", "", c) for c in facts["currency"]}
-    facts["numeric"] = {n for n in facts["numeric"] if n not in currency_digits}
-    return facts
+# Fact extraction (currency/numeric/date/contact) lives in
+# brand_audit.facts, shared with extractability-audit's schema-vs-text
+# contradiction detector. Deliberately regex-based, not a real NER
+# model: a full entity extractor would itself need model weights, which
+# the project's own constraints rule out (see docs/build-plan.md Part
+# 4). This covers 4 of the 5 fact types the build plan names -- "entity"
+# extraction is left as documented future work rather than faked with a
+# noisy heuristic.
 
 
 @dataclass
