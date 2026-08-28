@@ -54,6 +54,36 @@ The rule pack. Every finding emitted by any stage skill must map to an entry her
 - **Fix pattern:** exempt documented AI-crawler UAs from the JS-challenge gate, or at minimum always serve `/robots.txt` unchallenged — most bot-management vendors document this as a best practice already.
 - **Source:** curve.finance (discovered while screening curve.fi to curve.finance for the RENDER differential; no live-assistant query run yet — flagged for a follow-up citation probe).
 
+### REACH-004 — Soft-404: HTTP 200 on a page that reads as missing
+- **Stage:** reach
+- **Mechanism:** a page returns HTTP 200 (a healthy status code) but its actual content says the thing isn't there ("page not found", "no longer available", etc.), combined with unusually short content. A crawler that trusts the status code — which is the normal, correct thing to do — treats this as valid, citable content; an assistant could cite a URL whose actual text tells a reader nothing is there.
+- **Detection method:** for each fetched page, if `http_status == 200` and the stripped text is short (<300 chars) *and* matches a not-found phrase pattern, flag it. Both conditions are required — a real page that happens to mention "page not found" as a topic (e.g. an article about broken links) won't false-positive on the phrase match alone, because it won't also be a near-empty page.
+- **Evidence artifact:** the URL, its HTTP status, and the stripped content that triggered the phrase match.
+- **Severity default:** high (a single page returning wrong status is `page_class`-scoped, not site-wide).
+- **Confidence:** medium — a keyword+length heuristic, not a certainty; a legitimately short page containing one of the trigger phrases in an unrelated context is possible, if unlikely given both conditions must hold.
+- **Fix pattern:** return a real 404 (or 410) status for content that's actually gone.
+- **Source:** engineering-derived from the build plan's Day 3 requirement ("status/soft-404 detection"), not yet observed on a real site during field research — implemented and unit-tested (`tests/test_reach_detectors.py`) against synthetic fixtures, not yet run against a live soft-404 in the wild. Flagged here so that gap is visible, not papered over.
+
+### REACH-005 — Ambiguous or cross-domain `rel=canonical`
+- **Stage:** reach
+- **Mechanism:** either (a) a page emits two or more distinct `rel=canonical` hrefs, leaving a crawler unable to determine which URL should receive citation credit, or (b) a page canonicalizes to a different domain entirely, which — if unintentional (a staging/CDN template artifact is the common real-world cause) — means the brand's own domain never accrues citation authority for content it actually published. Deliberately does **not** flag a *missing* canonical tag: that's normal and common, not a defect, and flagging it would be exactly the kind of generic-checklist noise this project is trying to avoid.
+- **Detection method:** parse `<link rel="canonical">` tags per page; flag if count > 1 with differing hrefs, or if the single href's domain differs from the page's own domain.
+- **Evidence artifact:** the page URL and the canonical href(s) found.
+- **Severity default:** medium (degrades citation-credit consolidation without blocking a stage outright).
+- **Confidence:** medium — the pattern is unambiguous once matched, but whether a given cross-domain canonical is a real misconfiguration or an intentional syndication setup needs a human (or `finding-verification`) to confirm.
+- **Fix pattern:** emit exactly one `rel=canonical` tag per page, self-referential unless cross-domain syndication is genuinely intended.
+- **Source:** engineering-derived from the build plan's Day 3 requirement ("canonical integrity"); unit-tested against synthetic fixtures, not yet observed on a real site.
+
+### REACH-006 — Declared sitemap is unreachable
+- **Stage:** reach
+- **Mechanism:** `robots.txt` declares a `Sitemap:` URL, but fetching it fails. Sitemap-first discovery — the fastest, most reliable way a crawler finds a site's pages — gets nothing, and the crawler falls back to slower internal-link discovery, which may miss pages entirely under a crawl-budget cap.
+- **Detection method:** if `robots.txt` declares one or more sitemap URLs and none of them are fetchable, flag it.
+- **Evidence artifact:** the declared sitemap URL(s).
+- **Severity default:** medium (degrades discovery completeness without blocking the site outright — internal-link discovery is a fallback, not nothing).
+- **Confidence:** high — directly observed (the URL either resolves or it doesn't).
+- **Fix pattern:** fix or remove the declared sitemap URL.
+- **Source:** engineering-derived from the build plan's Day 3 requirement ("sitemap health"); unit-tested, not yet observed on a real site.
+
 ## RENDER-00x
 
 ### RENDER-001 — Client-side-only rendering leaves an empty content shell for non-JS fetchers
@@ -130,4 +160,4 @@ _(Not yet testable — requires the stage ⑤ citable-page-set gating built Day 
 
 ---
 
-**Status:** Day 1 pass (2 sessions) — 5 shipped findings (REACH-001, REACH-002, REACH-003, RENDER-001, and the TRUST-001 pattern), 1 high-confidence cross-site pattern reproduced 3-for-3 (TRUST-001), 2 explicit observations pending falsification (TRUST-002, TRUST-003), 1 low-severity structural note (TRUST-004), 3 positive controls (docs.python.org, allbirds.com, plus the RENDER-00x negative-result set). Deliberately not padded to ~30 — CHUNK/ENGAGE are honestly empty pending later stages' pipeline (Day 5–7); see `docs/progress.md` for what's next.
+**Status:** Day 1 pass (2 sessions) — 5 shipped findings (REACH-001, REACH-002, REACH-003, RENDER-001, and the TRUST-001 pattern), 1 high-confidence cross-site pattern reproduced 3-for-3 (TRUST-001), 2 explicit observations pending falsification (TRUST-002, TRUST-003), 1 low-severity structural note (TRUST-004), 3 positive controls (docs.python.org, allbirds.com, plus the RENDER-00x negative-result set). Day 3 added 3 more entries (REACH-004/005/006), engineering-derived from the build plan's own requirements rather than field research — flagged as such since they haven't yet been observed on a real site, only unit-tested against synthetic fixtures. All 4 field-verified REACH/RENDER entries (001/002/003, RENDER-001) are now live detector code, not just documentation — see `skills/crawl-reach-audit/scripts/detect.py` and `skills/render-gap-audit/scripts/render_detect.py`. Deliberately not padded to ~30 — CHUNK/ENGAGE are honestly empty pending later stages' pipeline (Day 5–7); see `docs/progress.md` for what's next.
