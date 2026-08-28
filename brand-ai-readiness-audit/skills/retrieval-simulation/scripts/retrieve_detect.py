@@ -17,11 +17,11 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from brand_audit.chunk import Chunk, chunk_page  # noqa: E402
+from brand_audit.crawl import find_homepage_url  # noqa: E402
 from brand_audit.facts import extract_facts  # noqa: E402
 from brand_audit.jsonld import extract_json_ld, walk  # noqa: E402
 from brand_audit.models import (  # noqa: E402
@@ -103,20 +103,11 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
     if org_name is not None:
         return Entity(name=org_name, category=category, source="json-ld")
 
-    # Find the actual homepage among crawled URLs by normalized path, not
-    # exact string equality against the passed `homepage_url` -- that
-    # requires byte-identical formatting (trailing slash, scheme) between
-    # the CLI's site argument and a real crawled URL, which real sites
-    # essentially never satisfy (confirmed: against docs.python.org this
-    # returned "3.10.20 Documentation" as the detected entity name --
-    # the title of whichever crawled URL happened to sort first
-    # alphabetically -- instead of falling through to any homepage-like
-    # page at all, because "https://docs.python.org" was never literally
-    # a key in `pages`). A root path ("" or "/") is a much more reliable
-    # signal of "this is the homepage" than string equality.
-    root_urls = [u for u in sorted(pages) if urlparse(u).path in ("", "/")]
-    exact_urls = [homepage_url] if homepage_url in pages else []
-    candidates = exact_urls + [u for u in root_urls if u not in exact_urls]
+    # find_homepage_url matches by normalized root path, not exact string
+    # equality against `homepage_url` -- see its docstring (brand_audit.
+    # crawl) for why exact equality was a real bug here on Day 5.
+    resolved_homepage = find_homepage_url(pages, homepage_url)
+    candidates = [resolved_homepage] if resolved_homepage else []
     candidates += [u for u in sorted(pages) if u not in candidates]
 
     for url in candidates:
@@ -194,10 +185,18 @@ def _coverage(matched: frozenset[str], query_terms: frozenset[str], entity_token
 
 def classify(
     query: str, intent: str, retriever: BM25Retriever, entity_tokens: frozenset[str]
-) -> tuple[AnswerabilityOutcome, ScoredChunk | None]:
+) -> tuple[AnswerabilityOutcome, ScoredChunk | None, bool]:
+    """Returns (outcome, top_result, cross_page). `cross_page` is only
+    meaningful when outcome is PARTIAL -- True if the chunks whose
+    matched terms had to be combined to reach the assembled-coverage
+    threshold span more than one URL. A same-page multi-chunk assembly
+    is already fragile (per the build plan's own framing: "answer must
+    be assembled across chunks/pages... fragile under real retrieval");
+    a *cross-page* one is worse, since real assistants rarely join facts
+    from two different pages at all -- see CHUNK-003."""
     results = retriever.query(query, top_k=5)
     if not results:
-        return AnswerabilityOutcome.UNRETRIEVABLE, None
+        return AnswerabilityOutcome.UNRETRIEVABLE, None, False
 
     threshold = _SINGLE_CHUNK_THRESHOLD.get(intent, _DEFAULT_SINGLE_CHUNK_THRESHOLD)
     fact_type = _FACT_CHECK_BY_INTENT.get(intent)
@@ -216,17 +215,198 @@ def classify(
         coverage = _coverage(r.matched_terms, r.query_terms, entity_tokens)
         fact_present = bool(extract_facts(r.chunk.text)[fact_type]) if fact_type else True
         if coverage >= threshold and fact_present:
-            return AnswerabilityOutcome.ANSWERABLE, r
+            return AnswerabilityOutcome.ANSWERABLE, r, False
 
     top = results[0]
     union_matched: set[str] = set()
+    contributing_urls: set[str] = set()
     for r in results:
+        if r.matched_terms - entity_tokens:  # only chunks contributing a *substantive* term count
+            contributing_urls.add(r.chunk.url)
         union_matched |= r.matched_terms
     union_coverage = _coverage(frozenset(union_matched), top.query_terms, entity_tokens)
     if union_coverage >= _ASSEMBLED_THRESHOLD:
-        return AnswerabilityOutcome.PARTIAL, top
+        return AnswerabilityOutcome.PARTIAL, top, len(contributing_urls) > 1
 
-    return AnswerabilityOutcome.UNGROUNDED, top
+    return AnswerabilityOutcome.UNGROUNDED, top, False
+
+
+# --- orphan-fact detection (CHUNK-002) --------------------------------------
+
+# Two or more consecutive capitalized words -- a crude proper-noun-phrase
+# proxy (product names, brand names), not real NER. Chosen because a real
+# NER model would need weights the project's constraints rule out (same
+# reasoning as brand_audit.facts skipping "entity" fact extraction).
+_PROPER_NOUN_PHRASE_RE = re.compile(r"\b[A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*){1,4}\b")
+
+
+def _has_identifying_subject(chunk: Chunk) -> bool:
+    """Is there anything in this chunk that names *what* a fact is
+    about? The chunk's own heading (already prepended to its text as of
+    Day 5) is the strongest signal; a proper-noun-like phrase anywhere
+    in the chunk is a weaker fallback for chunks with no heading at
+    all."""
+    if chunk.section_heading:
+        return True
+    return bool(_PROPER_NOUN_PHRASE_RE.search(chunk.text))
+
+
+def find_orphan_fact_chunks(chunks: list[Chunk]) -> list[Chunk]:
+    return [c for c in chunks if extract_facts(c.text)["currency"] and not _has_identifying_subject(c)]
+
+
+def detect_orphan_facts(chunks: list[Chunk]) -> Finding | None:
+    """CHUNK-002: a chunk contains a price but nothing in the chunk
+    identifies what it's the price *of* -- the build plan's own example
+    is a `<td>` price cell 40 DOM nodes downstream of the product name
+    in an `<h1>`. One aggregate finding, not one per chunk, matching
+    CHUNK-001's dedup pattern."""
+    orphans = find_orphan_fact_chunks(chunks)
+    if not orphans:
+        return None
+    confidence = Confidence.MEDIUM  # proper-noun-phrase regex is a heuristic, not certain
+    severity = compute_severity(Stage.RETRIEVE, BlastRadius.DEGRADES, confidence)
+    return Finding(
+        id=_next_id(),
+        title=f"{len(orphans)} chunk(s) contain a price with no identifying subject nearby",
+        severity=severity,
+        stage=Stage.RETRIEVE,
+        taxonomy_id="CHUNK-002",
+        scope=Scope(checked=len(chunks), affected=len(orphans)),
+        evidence="; ".join(f"{c.url}#{c.chunk_index}: {c.text[:120]!r}" for c in orphans[:5]),
+        artifacts=[Artifact(url=c.url, selector=f"chunk {c.chunk_index}") for c in orphans[:3]],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            "Retrieval operates on chunks, not pages -- a fact whose subject and value land in "
+            "different chunks is unretrievable even though the page nominally 'has' it. A chunk "
+            "containing only a price, with no product name or heading to anchor it, answers no "
+            "buyer question on its own no matter how well it's retrieved."
+        ),
+        affected_queries=[],
+        suggested_action=SuggestedAction(
+            summary="Co-locate the subject and its value: add a heading or a naming sentence in the same section as the fact.",
+            priority=severity,
+            impact="medium",
+            effort="low",
+            confidence=confidence,
+            stage_unblocked=Stage.RETRIEVE,
+            implementation=["Add a section heading, or a lead-in sentence naming the subject, near each standalone price/fact"],
+            verification_step="Re-run the audit and confirm the chunk now resolves via detect_orphan_facts",
+            rationale_ref="references/taxonomy.md#chunk-002",
+        ),
+    )
+
+
+# --- boilerplate-ratio scoring (CHUNK-004) -----------------------------------
+
+_BOILERPLATE_PHRASES = [
+    "all rights reserved", "privacy policy", "terms of service", "terms and conditions",
+    "cookie policy", "sign up for our newsletter", "subscribe to our newsletter",
+    "we use cookies", "accept all cookies", "follow us on", "copyright ©",
+    "skip to content", "skip to main content",
+]
+
+
+def boilerplate_ratio(chunk: Chunk) -> float:
+    """Fraction of a chunk's characters covered by known boilerplate
+    phrases. Expected to rarely trigger in this pipeline specifically:
+    chunking already runs on trafilatura's boilerplate-*stripped* main-
+    content extraction (see chunk.py), so contamination reaching a
+    chunk at all means trafilatura's own boilerplate detection missed
+    it -- a real, if rarer, signal worth keeping rather than assuming
+    away."""
+    text_lower = chunk.text.lower()
+    matched_chars = sum(len(p) for p in _BOILERPLATE_PHRASES if p in text_lower)
+    return min(1.0, matched_chars / max(1, len(chunk.text)))
+
+
+_BOILERPLATE_RATIO_THRESHOLD = 0.15
+
+
+def detect_boilerplate_dilution(chunks: list[Chunk]) -> Finding | None:
+    """CHUNK-004: chunks where boilerplate phrases make up an unusually
+    high fraction of the text, diluting whatever real signal is there
+    below what a retrieval system would rank highly."""
+    diluted = [c for c in chunks if boilerplate_ratio(c) >= _BOILERPLATE_RATIO_THRESHOLD]
+    if not diluted:
+        return None
+    confidence = Confidence.MEDIUM
+    severity = compute_severity(Stage.RETRIEVE, BlastRadius.DEGRADES, confidence)
+    return Finding(
+        id=_next_id(),
+        title=f"{len(diluted)} chunk(s) are diluted with boilerplate text (cookie/legal/social-follow phrases)",
+        severity=severity,
+        stage=Stage.RETRIEVE,
+        taxonomy_id="CHUNK-004",
+        scope=Scope(checked=len(chunks), affected=len(diluted)),
+        evidence="; ".join(f"{c.url}#{c.chunk_index}: {boilerplate_ratio(c):.0%} boilerplate" for c in diluted[:5]),
+        artifacts=[Artifact(url=c.url, selector=f"chunk {c.chunk_index}") for c in diluted[:3]],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            "A chunk that's mostly cookie-notice/legal/social-follow boilerplate has whatever real "
+            "signal it carries diluted below what a retrieval system ranks highly -- the fact is "
+            "technically present in the corpus but competes against noise for the same chunk's "
+            "term-frequency budget."
+        ),
+        affected_queries=[],
+        suggested_action=SuggestedAction(
+            summary="Move boilerplate (cookie notices, legal text, social links) out of the main content flow.",
+            priority=severity,
+            impact="low",
+            effort="medium",
+            confidence=confidence,
+            stage_unblocked=Stage.RETRIEVE,
+            implementation=["Move repeated legal/social boilerplate into a template region (footer/modal) separate from article content"],
+            verification_step="Re-run the audit and confirm the affected chunk's boilerplate_ratio drops",
+            rationale_ref="references/taxonomy.md#chunk-004",
+        ),
+    )
+
+
+def detect_cross_page_join_reliance(
+    matrix_with_cross_page: list[tuple[AnswerabilityMatrixEntry, bool]], pages: dict[str, str]
+) -> Finding | None:
+    """CHUNK-003: a PARTIAL answer that required combining chunks from
+    *different* pages, not just different sections of one page. Real
+    assistants rarely perform this join at all -- see docs/build-plan.md
+    Part 2 (3)."""
+    cross_page_entries = [e for e, cp in matrix_with_cross_page if cp]
+    if not cross_page_entries:
+        return None
+    confidence = Confidence.MEDIUM
+    severity = compute_severity(Stage.RETRIEVE, BlastRadius.DEGRADES, confidence)
+    return Finding(
+        id=_next_id(),
+        title=f"{len(cross_page_entries)} buyer-intent quer{'y' if len(cross_page_entries) == 1 else 'ies'} can only be answered by combining facts from different pages",
+        severity=severity,
+        stage=Stage.RETRIEVE,
+        taxonomy_id="CHUNK-003",
+        scope=Scope(checked=len(matrix_with_cross_page), affected=len(cross_page_entries)),
+        evidence="; ".join(f"[{e.intent}] {e.query!r}" for e in cross_page_entries[:5]),
+        artifacts=[Artifact(url=u) for u in sorted(pages)[:3]],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            "The answer exists in the corpus but only by combining facts from two or more distinct "
+            "pages -- e.g. one page's specification plus another page's price. Real retrieval "
+            "pipelines rarely perform this cross-page join at query time, so a PARTIAL outcome "
+            "here is more fragile than a same-page multi-chunk assembly."
+        ),
+        affected_queries=[e.query for e in cross_page_entries[:10]],
+        suggested_action=SuggestedAction(
+            summary="Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages.",
+            priority=severity,
+            impact="medium",
+            effort="medium",
+            confidence=confidence,
+            stage_unblocked=Stage.RETRIEVE,
+            implementation=["Summarize the combined fact (e.g. spec + price together) on at least one page"],
+            verification_step="Re-run the audit and confirm the query now resolves from a single page",
+            rationale_ref="references/taxonomy.md#chunk-003",
+        ),
+    )
 
 
 # --- pipeline ---------------------------------------------------------------
@@ -234,7 +414,7 @@ def classify(
 
 def run_retrieval_simulation(
     pages: dict[str, str], homepage_url: str | None = None
-) -> tuple[list[AnswerabilityMatrixEntry], Finding | None, Entity]:
+) -> tuple[list[AnswerabilityMatrixEntry], list[Finding], Entity]:
     """pages: {url: raw_html} for the AI-reachable corpus (already
     gated through stages (1)/(2) by the caller -- this function doesn't
     re-derive that gate, per the composition contract)."""
@@ -251,22 +431,23 @@ def run_retrieval_simulation(
     retriever.index(chunks)
 
     matrix: list[AnswerabilityMatrixEntry] = []
+    matrix_with_cross_page: list[tuple[AnswerabilityMatrixEntry, bool]] = []
     unanswerable_examples: list[str] = []
     for query, intent in queries:
-        outcome, top = classify(query, intent, retriever, entity_tokens)
-        matrix.append(
-            AnswerabilityMatrixEntry(
-                query=query,
-                intent=intent,
-                outcome=outcome,
-                top_chunk_url=top.chunk.url if top else None,
-                citable=outcome in (AnswerabilityOutcome.ANSWERABLE, AnswerabilityOutcome.PARTIAL),
-            )
+        outcome, top, cross_page = classify(query, intent, retriever, entity_tokens)
+        entry = AnswerabilityMatrixEntry(
+            query=query,
+            intent=intent,
+            outcome=outcome,
+            top_chunk_url=top.chunk.url if top else None,
+            citable=outcome in (AnswerabilityOutcome.ANSWERABLE, AnswerabilityOutcome.PARTIAL),
         )
+        matrix.append(entry)
+        matrix_with_cross_page.append((entry, cross_page))
         if outcome in (AnswerabilityOutcome.UNRETRIEVABLE, AnswerabilityOutcome.UNGROUNDED):
             unanswerable_examples.append(f"[{intent}] {query!r} -> {outcome.value}")
 
-    finding = None
+    findings: list[Finding] = []
     # `pages` empty (e.g. a single-page site whose only page was excluded
     # upstream as a RENDER-001 empty shell) means there's no page left to
     # cite as evidence -- Finding requires >=1 artifact by construction
@@ -275,12 +456,13 @@ def run_retrieval_simulation(
     # against the js-only-price fixture) or fabricate an artifact that
     # doesn't back the claim. The matrix itself still reports honestly
     # (every query UNRETRIEVABLE); RENDER-001 already carries the actual
-    # evidence for *why*, so a redundant, evidence-less CHUNK-001 finding
-    # wouldn't add information anyway.
+    # evidence for *why*, so a redundant, evidence-less finding here
+    # wouldn't add information anyway. All four detectors below share
+    # this guard for the same reason.
     if pages and matrix and len(unanswerable_examples) / len(matrix) >= 0.25:
         confidence = Confidence.HIGH
         severity = compute_severity(Stage.RETRIEVE, BlastRadius.DEGRADES, confidence)
-        finding = Finding(
+        findings.append(Finding(
             id=_next_id(),
             title=f"{len(unanswerable_examples)} of {len(matrix)} buyer-intent queries are unanswerable from the AI-reachable corpus",
             severity=severity,
@@ -313,6 +495,15 @@ def run_retrieval_simulation(
                 verification_step="Re-run the audit after publishing the change and confirm the query's outcome improves",
                 rationale_ref="references/taxonomy.md#chunk-001",
             ),
-        )
+        ))
 
-    return matrix, finding, entity
+    if pages:
+        for f in (
+            detect_orphan_facts(chunks),
+            detect_boilerplate_dilution(chunks),
+            detect_cross_page_join_reliance(matrix_with_cross_page, pages),
+        ):
+            if f is not None:
+                findings.append(f)
+
+    return matrix, findings, entity

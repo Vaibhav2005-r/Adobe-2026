@@ -2,10 +2,9 @@
 """Pipeline driver: crawl a site, run whatever stages are wired up, emit a
 schema-valid AuditReport.
 
-Day 5 milestone: stage (1) REACH, stage (2) RENDER, stage (3) EXTRACT,
-and stage (4) RETRIEVE (retrieval-simulation -- chunking, BM25,
-answerability matrix) are wired up. Stages (5)-(6) don't exist yet, so
-their ai_readiness field reports "skipped", not "pass".
+Day 6 milestone: stage (1) REACH through stage (5) CITE are wired up.
+Stage (6) ARRIVE doesn't exist yet, so its ai_readiness field reports
+"skipped", not "pass".
 
 Usage:
     python run_audit.py example.com
@@ -32,6 +31,8 @@ _EXTRACT_SCRIPTS = Path(__file__).resolve().parents[2] / "extractability-audit" 
 sys.path.insert(0, str(_EXTRACT_SCRIPTS))
 _RETRIEVE_SCRIPTS = Path(__file__).resolve().parents[2] / "retrieval-simulation" / "scripts"
 sys.path.insert(0, str(_RETRIEVE_SCRIPTS))
+_TRUST_SCRIPTS = Path(__file__).resolve().parents[2] / "trust-corroboration-audit" / "scripts"
+sys.path.insert(0, str(_TRUST_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
@@ -101,6 +102,7 @@ async def run_reach_stage(
     findings += reach_detect.detect_soft_404(base_url, outcomes)
     findings += reach_detect.detect_canonical_issues(base_url, outcomes)
     findings += reach_detect.detect_sitemap_health(base_url, robots, sitemap_reachable=sitemap_fetch_ok)
+    findings += reach_detect.detect_waf_contradicts_robots(base_url, outcomes)
 
     if not robots.fetched:
         waf_probe = await probe_user_agents(base_url, reach_detect.WAF_PROBE_UAS)
@@ -236,11 +238,11 @@ def run_retrieve_stage(
         if url in raw_by_url and url not in empty_shell_urls
     }
 
-    matrix, finding, entity = retrieve_detect.run_retrieval_simulation(pages, homepage_url=base_url)
+    matrix, retrieve_findings, entity = retrieve_detect.run_retrieval_simulation(pages, homepage_url=base_url)
 
     stage_result = StageResult(
         stage=Stage.RETRIEVE,
-        findings=[finding] if finding else [],
+        findings=retrieve_findings,
         corpus_delta=list(pages),
         metrics={
             "pages_indexed": len(pages),
@@ -250,6 +252,37 @@ def run_retrieve_stage(
         },
     )
     return stage_result, matrix
+
+
+def run_cite_stage(corpus_urls: list[str], reach_outcomes: list, base_url: str) -> StageResult:
+    """Entity anchoring, freshness, description drift, attribution
+    density. Pure parsing over raw HTML (same reasoning as EXTRACT):
+    JSON-LD and meta tags live in <head> and are overwhelmingly server-
+    rendered even on JS-heavy sites, so this runs on the full stage (1)
+    survivor set directly rather than RETRIEVE's more narrowly-gated
+    corpus -- CITE doesn't need chunked/indexed content, just the raw
+    pages."""
+    import trust_detect
+
+    raw_by_url = {o.url: o.record.text for o in reach_outcomes if o.record is not None}
+    pages = {url: raw_by_url[url] for url in corpus_urls if url in raw_by_url}
+
+    findings = []
+    for f in (
+        trust_detect.detect_missing_entity_anchoring(pages),
+        trust_detect.detect_staleness(pages),
+        trust_detect.detect_description_drift(pages, base_url),
+        trust_detect.detect_low_attribution_density(pages),
+    ):
+        if f is not None:
+            findings.append(f)
+
+    return StageResult(
+        stage=Stage.CITE,
+        findings=findings,
+        corpus_delta=list(pages),
+        metrics={"pages_checked": len(pages)},
+    )
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -329,6 +362,14 @@ async def main_async(args: argparse.Namespace) -> int:
             reach_result.corpus_delta, reach_outcomes, render_result, site
         )
         stage_results.append(retrieve_result)
+
+    # CITE is also pure parsing, no network -- same budget-gating
+    # rationale as EXTRACT/RETRIEVE.
+    if budget.over_budget():
+        degradations.append("cite_stage_skipped_low_budget")
+    else:
+        cite_result = run_cite_stage(reach_result.corpus_delta, reach_outcomes, site)
+        stage_results.append(cite_result)
 
     duration_s = time.monotonic() - start
 

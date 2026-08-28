@@ -84,6 +84,16 @@ The rule pack. Every finding emitted by any stage skill must map to an entry her
 - **Fix pattern:** fix or remove the declared sitemap URL.
 - **Source:** engineering-derived from the build plan's Day 3 requirement ("sitemap health"); unit-tested, not yet observed on a real site.
 
+### REACH-007 — WAF blocks a fetch even though robots.txt explicitly allows it
+- **Stage:** reach
+- **Mechanism:** `robots.txt` declares no `Disallow` covering these paths — they pass the crawler's own permission check before being fetched at all — but fetching them still returns a block-shaped status (403/429/503). An infrastructure layer (WAF/bot-management) is contradicting the site's own declared policy: robots.txt says "you're welcome here," and the site's actual behavior says otherwise. Distinct from `REACH-003`, which requires `robots.txt` itself to be unreadable; this is the more common real-world shape, where the declared policy is perfectly normal and permissive but doesn't reflect what the infrastructure layer actually does.
+- **Detection method:** among sampled URLs that passed the robots-permission check, if ≥80% return a block-shaped status (403/429/503), flag it. The 80% threshold (not "any") is deliberate — a handful of isolated 403s (a genuinely gone page, a rate-limit blip) isn't a policy contradiction; the *majority* of an explicitly-allowed sample being blocked is.
+- **Evidence artifact:** up to 5 `url -> status` pairs from the blocked subset.
+- **Severity default:** critical (site-wide — the same infrastructure gate applies regardless of which allowed path a crawler requests).
+- **Confidence:** high — directly observed status codes against paths that independently passed the robots-permission check.
+- **Fix pattern:** align the WAF/bot-management allowlist with the declared robots.txt policy, or add explicit `Disallow` rules for what's actually blocked so crawlers don't waste budget discovering the contradiction themselves.
+- **Source:** found on a real site during Day 6's wild-corpus validation sweep, not hypothesized first and confirmed later: allbirds.com's `robots.txt` is a standard, permissive Shopify robots.txt with no rule blocking the 8 sampled product/page URLs, yet every one of them returned HTTP 403 for this project's own declared crawler UA. Implemented and shipped the same day it was found.
+
 ## RENDER-00x
 
 ### RENDER-001 — Client-side-only rendering leaves an empty content shell for non-JS fetchers
@@ -158,6 +168,36 @@ The rule pack. Every finding emitted by any stage skill must map to an entry her
 
 **A cluster of bugs found and fixed while building this detector, not before it (see `docs/progress.md` for the full trace):** a latent `selectolax` grouped-CSS-selector bug (cross-tag document order isn't preserved -- also silently affected `EXTRACT-003` since Day 4, undetected until this stage's per-word heading attribution made it obvious); section headings weren't part of any chunk's searchable text at all, so a query like "how do I contact them" could never match a "Contact" section by heading alone; the entity's own name tokens and question-scaffolding words ("how", "does", "what") diluted the coverage calculation enough to make directly-stated facts score as false negatives; the classifier only ever checked the top-ranked BM25 result, missing a correctly-retrieved-but-not-ranked-first answer chunk; no stemming meant "cost" (query) never matched "costs" (page text); and an empty-corpus edge case (every page excluded as a `RENDER-001` shell) crashed on `Finding`'s own `min_length=1` artifacts constraint. Left detailed here rather than only in the commit history because the *pattern* -- test against real, structured content early, not just whether the code runs without raising -- is the actual lesson, not any one specific fix.
 
+### CHUNK-002 — Orphan fact: a value with no identifying subject in the same chunk
+- **Stage:** retrieve
+- **Mechanism:** a chunk contains a price (or other currency fact) but nothing in the chunk names *what* the fact is about — no section heading, no proper-noun-like phrase identifying a subject. The build plan's own illustrative example: a `<td>₹24,999</td>` whose product name sits 40 DOM nodes upstream in an `<h1>`. Retrieval operates on chunks, not pages — a fact whose subject and value land in different chunks is unretrievable even though the page as a whole "has" both.
+- **Detection method:** for every chunk carrying a currency fact (via `brand_audit.facts.extract_facts`), check for an identifying subject: the chunk's own `section_heading` (strongest signal — chunk headings are now prepended to chunk text, see `RENDER`/`CHUNK-001` notes) or, failing that, a proper-noun-like phrase (two or more consecutive capitalized words) anywhere in the chunk text. Neither present -> orphaned. One aggregate finding across all orphaned chunks found, not one per chunk.
+- **Evidence artifact:** up to 5 `url#chunk_index: text snippet` lines.
+- **Severity default:** medium (degrades retrieval quality for that specific fact without blocking a stage outright).
+- **Confidence:** medium — the proper-noun-phrase regex is a heuristic (crude proxy for real subject identification, not real NER — see `brand_audit.facts`'s equivalent note on why a full NER model isn't used), so a false positive is plausible for a chunk whose subject is named some other way this heuristic doesn't recognize.
+- **Fix pattern:** co-locate the subject and its value — add a heading, or a lead-in sentence naming the subject, near each standalone fact.
+- **Source:** engineering-derived from the build plan's Day 6 requirement ("orphan-fact detector"); unit-tested against both a deliberately-orphaned synthetic chunk and a properly-identified one, not yet observed as a defect on a real site (the `retrieval-answerable` fixture's own price chunk is correctly *not* orphaned, since it has a heading).
+
+### CHUNK-003 — Answer only exists by combining facts from different pages
+- **Stage:** retrieve
+- **Mechanism:** a `PARTIAL` answerability outcome (facts must be assembled across the top-k retrieved chunks to reach the coverage threshold, per `CHUNK-001`'s classifier) where the contributing chunks span more than one distinct URL, not just different sections of one page — e.g. one page's specification plus a different page's price. Real assistants rarely perform this cross-page join at query time, so this is a strictly weaker, more fragile case than a same-page multi-chunk `PARTIAL`.
+- **Detection method:** `retrieve_detect.classify()` already tracks, for every `PARTIAL` outcome, which chunks contributed a *substantive* (non-entity-token) matched term; if those chunks' URLs aren't all the same, the outcome is flagged `cross_page`. One aggregate finding across all cross-page `PARTIAL` queries.
+- **Evidence artifact:** up to 5 `[intent] 'query'` lines.
+- **Severity default:** medium (degrades citation quality — the fact is technically assemblable, just unrealistically so).
+- **Confidence:** medium — inferring "this chunk contributed to the answer" from which chunks shared a substantive matched term with the query is itself an approximation of what a real multi-chunk retrieval system would actually combine.
+- **Fix pattern:** summarize the combined fact (e.g. spec + price together) on at least one page, rather than relying on a reader — or a retriever — to join two pages.
+- **Source:** engineering-derived from the build plan's Day 6 requirement and Part 2 §③'s "cross-page join" mechanism; confirmed firing on real sites during the Day 6 wild-corpus sweep (stripe.com, notion.com both showed cross-page-dependent `PARTIAL` answers), not just the synthetic fixture.
+
+### CHUNK-004 — Chunk diluted with boilerplate text
+- **Stage:** retrieve
+- **Mechanism:** a chunk's real signal is diluted by cookie-notice/legal/social-follow boilerplate phrases making up an unusually high fraction of its characters — even though chunking already runs on `trafilatura`'s boilerplate-*stripped* main-content extraction (see `chunk.py`), so a diluted chunk reaching this far means that upstream stripping itself missed something.
+- **Detection method:** match chunk text (case-insensitively) against a small bundled list of common boilerplate phrases ("all rights reserved", "privacy policy", "we use cookies", "follow us on", ...); flag chunks where matched-phrase characters make up ≥15% of the chunk's total length.
+- **Evidence artifact:** up to 5 `url#chunk_index: NN% boilerplate` lines.
+- **Severity default:** medium (degrades retrieval quality for that chunk without blocking a stage outright).
+- **Confidence:** medium — a fixed phrase list can't cover every boilerplate pattern; absence of a match doesn't prove a chunk is clean, only that it doesn't match *this* list.
+- **Fix pattern:** move repeated legal/social boilerplate into a template region (footer/modal) clearly separated from the article content flow, so upstream boilerplate-detection can distinguish it.
+- **Source:** engineering-derived from the build plan's Day 6 requirement ("boilerplate-ratio scoring"); expected to rarely fire in this pipeline specifically, by design — see the mechanism note — and indeed stayed silent across the entire Day 6 wild-corpus sweep, which is the expected, honest result of `trafilatura`'s upstream stripping already doing its job on real sites, not evidence the detector doesn't work (confirmed separately against a deliberately-crafted synthetic chunk).
+
 ## TRUST-00x
 
 ### TRUST-001 — Third-party aggregator content displaces the brand's own page for "cost/pricing" intent queries
@@ -196,6 +236,46 @@ The rule pack. Every finding emitted by any stage skill must map to an entry her
 - **Fix pattern:** add `Person` JSON-LD with `sameAs` to the canonical profiles; 301-redirect legacy version subdomains to the current canonical domain.
 - **Source:** brittanychiang.com; query "Brittany Chiang frontend engineer portfolio background".
 
+### TRUST-005 — Missing entity anchoring (no sameAs), automated detector
+- **Stage:** cite
+- **Mechanism:** the general, automated version of `TRUST-004`'s hand-found case: a JSON-LD `Organization`/`LocalBusiness` node declares a `name` but no (or an empty) `sameAs` array. Without a `sameAs` anchor, a system trying to verify or disambiguate this entity — including against a same-named different company — has no machine-readable signal pointing to an authoritative external profile; the brand's identity rests entirely on unverified self-assertion. This is the on-site half of entity anchoring the build plan's own cut list says to keep, deliberately in place of a live name-collision web search (see the skill's module docstring for why: a live search breaks the project's determinism/portability constraints, and the cut list names it as the first thing to cut if behind schedule).
+- **Detection method:** walk every page's JSON-LD for an `Organization`/`LocalBusiness` node with a `name`; if the first one found (in deterministic sorted-URL order) has no non-empty `sameAs`, flag it. Whole-site check, one finding, not one per page.
+- **Evidence artifact:** the page URL and confirmation that `name` is present but `sameAs` is absent/empty.
+- **Severity default:** medium (degrades trust/corroboration signal without blocking a stage outright).
+- **Confidence:** high — direct presence/absence check, no inference.
+- **Fix pattern:** add a `sameAs` array to the Organization JSON-LD, pointing to owned authoritative profiles (Wikidata, LinkedIn, Crunchbase, verified social accounts).
+- **Source:** engineering-derived from the build plan's Day 6 requirement ("entity anchoring/sameAs"); confirmed firing on a real site during the Day 6 wild-corpus sweep (the `retrieval-answerable` fixture's own Organization node, which was never given a `sameAs` — an honest gap in a fixture built for a different stage, not a false positive).
+
+### TRUST-006 — Stale dateModified
+- **Stage:** cite
+- **Mechanism:** a page's JSON-LD `dateModified`/`datePublished` is more than a year old. Not proof any specific fact is wrong — proof the page hasn't been reviewed recently, which matters for freshness-sensitive claims (pricing, availability, current offerings) that an assistant might otherwise treat as current just because the page loaded successfully today.
+- **Detection method:** parse `dateModified`/`datePublished` from JSON-LD as ISO 8601; compare against a reference date (real "now" in production, parameterized for testability); flag if the gap exceeds 365 days.
+- **Evidence artifact:** the property name, its raw value, and the computed age in days.
+- **Severity default:** medium (degrades trust signal without blocking a stage outright).
+- **Confidence:** medium — staleness is a risk signal, not proof the content is actually wrong; a page can be old and still perfectly accurate.
+- **Fix pattern:** review the page's content and update `dateModified` to reflect the actual last-reviewed date.
+- **Source:** engineering-derived from the build plan's Day 6 requirement ("freshness... contradictions"); unit-tested with a parameterized reference date (not a live `datetime.now()` call scattered through the detector) so the test suite stays deterministic without mocking the clock.
+
+### TRUST-007 — Description drift across title/meta/JSON-LD/OG
+- **Stage:** cite
+- **Mechanism:** the brand's one-line self-description should read as the same story everywhere it's expressed. Compares the homepage's meta description, JSON-LD `description`, and `og:description` pairwise via token (Jaccard) overlap — not exact-match, since some wording variation is normal, but very low overlap between two fields that both exist means a system reading only one of them (search snippets typically use meta description; social shares use `og:description`; structured-data consumers use the JSON-LD description) forms a different picture of the brand depending on which one it happened to read, with no canonical framing to converge on.
+- **Detection method:** extract all three fields from the homepage (resolved by normalized root path via `brand_audit.crawl.find_homepage_url`, not exact string match — see that function's docstring for why exact match was a real Day 5 bug); for every pair where both are present, compute Jaccard token overlap; flag the first pair below 15%.
+- **Evidence artifact:** the two field names and their literal text.
+- **Severity default:** medium (degrades trust/consistency signal without blocking a stage outright).
+- **Confidence:** medium — token overlap is a proxy for "same story," not a certainty; two descriptions could share few words while still being consistent (or share many while contradicting each other on a key fact), though the former is far more common in practice.
+- **Fix pattern:** align the brand's one-line self-description across meta description, JSON-LD, and OpenGraph tags — the same sentence, or a close paraphrase, in all three.
+- **Source:** engineering-derived from the build plan's Day 6 requirement ("description drift across title/meta/JSON-LD/OG/footer" — title and footer not yet included, see `trust-corroboration-audit/SKILL.md` Status for the honest scope note); unit-tested, not yet observed as a defect on a real site (none of the wild-corpus sweep sites had fewer than 2 of the 3 checked fields consistent enough, or inconsistent enough, to trigger it either way in this pass).
+
+### TRUST-008 — Low attribution/statistic density
+- **Stage:** cite
+- **Mechanism:** per the KDD 2024 GEO study cited in the build plan, attributed statistics and source citations measurably move AI-visibility metrics (~+20-40% relative). A page stating multiple numeric claims with zero citation language anywhere reads as self-asserted, which weakens their weight for a system trying to corroborate them.
+- **Detection method:** for each page, count numeric/currency facts (via `brand_audit.facts.extract_facts`) and check for citation-like language ("according to", "study shows", "source:", ...) anywhere on the page; a page with ≥2 numeric facts and zero citation signals counts toward the pattern. Only flagged when this is the *majority* pattern across the sampled corpus — one page without a citation isn't a site-wide attribution gap, and flagging it as one would be exactly the kind of single-page overreach the taxonomy's own admission rule exists to prevent.
+- **Evidence artifact:** up to 5 affected page URLs.
+- **Severity default:** low (proactive/beyond-defect layer — the KDD study's own effect is about improving visibility, not fixing a defect that's actively blocking anything).
+- **Confidence:** low — citation-phrase matching is a narrow, easily-missed heuristic (a page could attribute a stat in a way this fixed phrase list doesn't recognize); shipped at `low` confidence deliberately rather than tuned to look more certain than it is, consistent with `EXTRACT-004`'s equivalent honesty about a weak heuristic.
+- **Fix pattern:** attribute key statistics to a source (internal data, a named study or survey) rather than stating bare numbers.
+- **Source:** engineering-derived from the build plan's Day 6 requirement and Part 2 §⑦'s cited KDD 2024 GEO study; confirmed firing on real sites during the Day 6 wild-corpus sweep (stripe.com, notion.com both showed the majority-unattributed pattern) as well as the synthetic fixtures.
+
 ## ENGAGE-00x
 
 _(Not yet testable — requires the stage ⑤ citable-page-set gating built Day 6–7. No entries expected until then. Note: REACH-002's redirect-to-locale behavior is adjacent to the "context reset" ENGAGE mechanism the build plan names — revisit whether it also deserves an ENGAGE-side entry once stage ⑥ is built and can test it as a *deep-link arrival* problem, not just a *crawler-fetch* problem.)_
@@ -209,4 +289,4 @@ _(Not yet testable — requires the stage ⑤ citable-page-set gating built Day 
 
 ---
 
-**Status:** 15 entries across REACH (6), RENDER (1), EXTRACT (4), CHUNK (1), TRUST (4, from Day 1 research, no detector yet). Field-verified (Day 1 research): REACH-001/002/003, RENDER-001, TRUST-001 (reproduced 3-for-3), TRUST-002/003 (explicit observations, unverified), TRUST-004 (low-severity note). Engineering-derived from the build plan's own stage requirements, not yet observed on a real site as a *defect* (though the pipeline itself has been run against real sites repeatedly to validate the detector code, not just fixtures): REACH-004/005/006 (Day 3), EXTRACT-001/002/003/004 (Day 4), CHUNK-001 (Day 5) — flagged as such throughout rather than presented with false field-research authority. Every REACH/RENDER/EXTRACT/CHUNK entry is live, tested detector code, not just documentation — see `skills/crawl-reach-audit/scripts/detect.py`, `skills/render-gap-audit/scripts/render_detect.py`, `skills/extractability-audit/scripts/extract_detect.py`, `skills/retrieval-simulation/scripts/retrieve_detect.py`. Deliberately not padded to ~30 — CITE (a full detector, not just Day 1's manual findings) and ENGAGE are honestly incomplete pending Days 6–7; see `docs/progress.md` for what's next.
+**Status:** 26 entries across REACH (7), RENDER (1), EXTRACT (4), CHUNK (4), TRUST (8). Field-verified (Day 1 research): REACH-001/002/003, RENDER-001, TRUST-001 (reproduced 3-for-3), TRUST-002/003 (explicit observations, unverified), TRUST-004 (low-severity note). Found on a real site during pipeline validation, not hand-researched first: REACH-007 (allbirds.com's WAF contradicting its own robots.txt). Engineering-derived from the build plan's own stage requirements, confirmed against real sites during validation sweeps even where not first discovered there: REACH-004/005/006 (Day 3), EXTRACT-001/002/003/004 (Day 4), CHUNK-001/002/003/004 (Days 5–6), TRUST-005/006/007/008 (Day 6) — flagged by origin throughout rather than presented with uniform authority. Every entry through CHUNK and every TRUST entry from 005 on is live, tested detector code, not just documentation — see `skills/crawl-reach-audit/scripts/detect.py`, `skills/render-gap-audit/scripts/render_detect.py`, `skills/extractability-audit/scripts/extract_detect.py`, `skills/retrieval-simulation/scripts/retrieve_detect.py`, `skills/trust-corroboration-audit/scripts/trust_detect.py`. Deliberately not padded to ~30 for its own sake — the number landed near there because Day 6's wild-corpus validation kept surfacing genuine mechanisms (REACH-007), not because entries were added to hit a target. ENGAGE is honestly empty pending Day 7; see `docs/progress.md` for what's next, including the full pipeline's clean run across an 11-site wild-corpus sweep (Day 6's own DoD).

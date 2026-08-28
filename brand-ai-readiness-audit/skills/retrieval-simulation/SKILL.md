@@ -29,9 +29,11 @@ good content" -- an outcome-anchored, reproducible probe.
 5. Classify each query: `ANSWERABLE` / `PARTIAL` / `UNGROUNDED` /
    `UNRETRIEVABLE`.
 
-Orphan-fact detection (a fact's subject and value land in different
-chunks) and boilerplate-ratio analysis are Day 6 work, not yet
-implemented -- see Status below.
+Also runs, as of Day 6: orphan-fact detection (`CHUNK-002` -- a fact's
+subject and value land in the same chunk or they don't), cross-page-join
+reliance (`CHUNK-003` -- a `PARTIAL` answer that only resolves by
+combining chunks from different pages, not just different sections of
+one page), and boilerplate-ratio scoring (`CHUNK-004`).
 
 Field research already surfaced a genre-specific citation-displacement
 pattern worth probing for here in a later pass: three well-optimized
@@ -58,17 +60,20 @@ through to the report's top level.
 ## Status
 
 Implemented in `scripts/retrieve_detect.py`, with chunking (`Chunk`,
-`chunk_page`) and BM25 (`BM25Retriever`, the `Retriever` protocol) in
-`src/brand_audit/chunk.py` / `retrieval.py` since both are generic,
-reusable primitives, not retrieval-simulation-specific. The Day 5 DoD --
-"given a fixture site, produces a reproducible answerability matrix. Two
-runs, byte-identical output" -- is an executable test
+`chunk_page`), BM25 (`BM25Retriever`, the `Retriever` protocol), and
+homepage resolution (`find_homepage_url`, shared with
+`trust-corroboration-audit`) in `src/brand_audit/chunk.py` /
+`retrieval.py` / `crawl.py` since all three are generic, reusable
+primitives, not retrieval-simulation-specific. The Day 5 DoD -- "given a
+fixture site, produces a reproducible answerability matrix. Two runs,
+byte-identical output" -- is an executable test
 (`tests/test_retrieve_stage.py`), verified against
 `tests/fixtures/retrieval-answerable`, a fixture built so some intents
 (identity/pricing/contact) come back genuinely answerable and others
 (comparison/trust) come back honestly ungrounded, rather than uniformly
-one or the other. Not implemented yet: orphan-fact detection,
-cross-page-join detection, boilerplate-ratio scoring (all Day 6), and
+one or the other. `CHUNK-002`/`003`/`004` (Day 6) are also implemented
+and tested, `CHUNK-003` confirmed firing on real sites (stripe.com,
+notion.com) during the Day 6 wild-corpus sweep. Not implemented:
 "entity" as a fact type (regex-based NER would be too noisy -- see
 `render-gap-audit`'s equivalent note). See `docs/progress.md` for the
 full accounting, including a cluster of real bugs this stage's build

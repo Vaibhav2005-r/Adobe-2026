@@ -67,9 +67,18 @@ def run_audit(site: str, run_dir: Path, *extra_args: str) -> dict:
 
 
 def test_clean_control_produces_zero_findings(fixture_server, tmp_path):
+    # Scoped to what this fixture actually certifies (REACH/RENDER/
+    # EXTRACT cleanliness), via an inclusion list rather than an
+    # exclusion list -- RETRIEVE (Day 5) and CITE (Day 6) both produce
+    # real findings here (18 generic buyer-intent queries and a missing
+    # sameAs are expected on a 2-page fixture never built to satisfy
+    # them), and an exclusion list would need editing every time a new
+    # stage lands. Whichever stages this fixture is actually meant to
+    # certify shouldn't change as the pipeline grows.
     report = run_audit(fixture_server, tmp_path / "run1")
-    non_retrieve_findings = [f for f in report["findings"] if f["stage"] != "retrieve"]
-    assert non_retrieve_findings == []
+    certified_stages = {"reach", "render", "extract"}
+    in_scope_findings = [f for f in report["findings"] if f["stage"] in certified_stages]
+    assert in_scope_findings == []
     assert report["run_manifest"]["pages_crawled"] >= 1
     assert report["summary"]["ai_readiness"]["reach"] == "pass"
     assert report["summary"]["ai_readiness"]["extract"] == "pass"
