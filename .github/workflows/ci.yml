@@ -46,5 +46,28 @@ jobs:
             exit 1;
           }
 
-      - name: Smoke test (pipeline skeleton + determinism, local fixture only)
+      - name: Test suite -- bare-machine config, no playwright
+        run: python -m pytest tests/ -v
+
+  test-with-render:
+    # Separate job so the base job above stays fast and representative of
+    # a judge's bare machine (no optional deps). This one proves the
+    # render-gap-audit detector itself works, per docs/build-plan.md Day
+    # 3 DoD: "the differ correctly flags the JS-only-price fixture and
+    # stays silent on the clean control."
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with render extra
+        run: pip install -e ".[dev,render]"
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      - name: Test suite -- full config, with playwright
         run: python -m pytest tests/ -v

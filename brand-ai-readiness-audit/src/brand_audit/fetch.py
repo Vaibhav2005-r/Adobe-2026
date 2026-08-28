@@ -31,7 +31,15 @@ async def fetch_many(
     concurrency: int = DEFAULT_CONCURRENCY,
     per_host_delay_s: float = DEFAULT_PER_HOST_DELAY_S,
     timeout_s: float = 15.0,
+    follow_redirects: bool = True,
 ) -> list[FetchOutcome]:
+    """Fetch every URL once. `follow_redirects=False` is what
+    crawl-reach-audit uses to see the *immediate* response (status,
+    headers, body) rather than whatever a redirect chain resolves to --
+    that's the only way to catch an empty-body redirect (REACH-002-style)
+    at all, since a followed redirect just silently lands on the content
+    the redirect target happens to have.
+    """
     semaphore = asyncio.Semaphore(concurrency)
     host_locks: dict[str, asyncio.Lock] = {}
 
@@ -52,9 +60,37 @@ async def fetch_many(
                 http_status=resp.status_code,
                 body=resp.content,
                 fetched_with_ua=user_agent,
+                headers=dict(resp.headers),
+                final_url=str(resp.url) if str(resp.url) != url else None,
             )
             return FetchOutcome(url=url, record=record)
 
     headers = {"User-Agent": user_agent}
-    async with httpx.AsyncClient(headers=headers, http2=True, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        headers=headers, http2=True, follow_redirects=follow_redirects
+    ) as client:
         return await asyncio.gather(*(fetch_one(client, u) for u in urls))
+
+
+async def probe_user_agents(url: str, user_agents: list[str], *, timeout_s: float = 15.0) -> dict[str, FetchOutcome]:
+    """Fetch the same URL once per UA -- used for WAF/interstitial
+    detection (REACH-003-style): a block that reproduces across every UA,
+    including a plain browser string with no bot signature, is an
+    infrastructure-level gate, not a UA-based robots.txt policy decision.
+    """
+    results: dict[str, FetchOutcome] = {}
+    async with httpx.AsyncClient(http2=True, follow_redirects=True) as client:
+        for ua in user_agents:
+            try:
+                resp = await client.get(url, headers={"User-Agent": ua}, timeout=timeout_s)
+                record = FetchRecord(
+                    url=url,
+                    http_status=resp.status_code,
+                    body=resp.content,
+                    fetched_with_ua=ua,
+                    headers=dict(resp.headers),
+                )
+                results[ua] = FetchOutcome(url=url, record=record)
+            except httpx.HTTPError as exc:
+                results[ua] = FetchOutcome(url=url, record=None, error=str(exc))
+    return results

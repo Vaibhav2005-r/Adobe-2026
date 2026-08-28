@@ -18,6 +18,12 @@ class FetchRecord:
     http_status: int | None
     body: bytes
     fetched_with_ua: str
+    headers: dict[str, str] = None  # type: ignore[assignment]
+    final_url: str | None = None  # after redirects, if any were followed
+
+    def __post_init__(self) -> None:
+        if self.headers is None:
+            self.headers = {}
 
     @property
     def sha256(self) -> str:
@@ -49,6 +55,8 @@ class ArtifactStore:
                         "url": fetch.url,
                         "http_status": fetch.http_status,
                         "fetched_with_ua": fetch.fetched_with_ua,
+                        "headers": fetch.headers,
+                        "final_url": fetch.final_url,
                         "sha256": digest,
                         "body_text": fetch.text,
                     },

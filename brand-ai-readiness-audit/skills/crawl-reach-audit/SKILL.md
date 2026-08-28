@@ -34,7 +34,12 @@ stage and get passed to `render-gap-audit`.
 ## Status
 
 Crawl core (robots parsing, sitemap discovery, deterministic sampling,
-fetch) lives in `src/brand_audit/crawl.py` and is exercised by
-`ai-visibility-orchestrator/scripts/run_audit.py`. Detector logic that
-turns raw crawl data into `Finding`s is not yet implemented -- see
+fetch) lives in `src/brand_audit/crawl.py`. Detector logic lives in
+`scripts/detect.py`: `REACH-001` (named AI-UA robots block), `REACH-002`
+(locale-redirect empty body), `REACH-003` (WAF/bot-challenge block) are
+translated directly from Day 1 field-research evidence; `REACH-004`
+(soft-404), `REACH-005` (canonical integrity), `REACH-006` (sitemap
+health) are engineering-derived from the build plan's own requirements
+and unit-tested (`tests/test_reach_detectors.py`) but not yet observed
+on a real site -- see
 `docs/progress.md` at the repo root.

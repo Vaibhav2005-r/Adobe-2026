@@ -48,4 +48,13 @@ recorded in `run_manifest.degradations`.
 
 ## Status
 
-Not yet implemented -- see `docs/progress.md` at the repo root.
+Implemented in `scripts/render_detect.py`: fact-level diff (currency,
+numeric, date, contact -- "entity" extraction deliberately left out
+rather than faked with a noisy heuristic, since a real NER model would
+itself need weights the project's constraints rule out), noise
+suppression (today's date, hex/CSRF-looking tokens), and the primary
+empty-shell signal that matches the two field-verified `RENDER-001`
+cases exactly. Confirmed against `tests/fixtures/js-only-price` (flags
+correctly) and `tests/fixtures/clean-control` (stays silent) -- see
+`tests/test_render_gap.py`, which is the Day 3 DoD as an executable
+test.
