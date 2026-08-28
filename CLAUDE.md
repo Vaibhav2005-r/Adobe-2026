@@ -49,7 +49,7 @@ Python 3.11+, `httpx` (async), `protego` (robots), `playwright` (optional, stage
 
 ## Current status
 
-Day 1 (Fri 28 Aug): field research + defect taxonomy. Update this section (or better, ask me to log it in `docs/progress.md`) as each day's DoD from the build plan is met, so a fresh session picks up where the last one left off.
+Day 1 (Fri 28 Aug): field research + defect taxonomy — core pass done (9 sites fully diagnosed, 2 shipped findings, 1 reproduced cross-site pattern, 2 observations pending falsification). Corpus breadth (10–15 target) and taxonomy count (~30 target) not yet hit — see `docs/progress.md` for the honest accounting and what's next. Update this section (or better, ask me to log it in `docs/progress.md`) as each day's DoD from the build plan is met, so a fresh session picks up where the last one left off.
 
 ## Commands (fill in once scaffolded on Day 2)
 
