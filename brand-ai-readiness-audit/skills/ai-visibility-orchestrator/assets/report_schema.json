@@ -1,0 +1,644 @@
+{
+  "$defs": {
+    "AIReadiness": {
+      "additionalProperties": false,
+      "properties": {
+        "arrive": {
+          "$ref": "#/$defs/ReadinessStatus"
+        },
+        "cite": {
+          "$ref": "#/$defs/ReadinessStatus"
+        },
+        "extract": {
+          "$ref": "#/$defs/ReadinessStatus"
+        },
+        "reach": {
+          "$ref": "#/$defs/ReadinessStatus"
+        },
+        "render": {
+          "$ref": "#/$defs/ReadinessStatus"
+        },
+        "retrieve": {
+          "$ref": "#/$defs/ReadinessStatus"
+        }
+      },
+      "required": [
+        "reach",
+        "render",
+        "extract",
+        "retrieve",
+        "cite",
+        "arrive"
+      ],
+      "title": "AIReadiness",
+      "type": "object"
+    },
+    "AnswerabilityMatrixEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "citable": {
+          "title": "Citable",
+          "type": "boolean"
+        },
+        "intent": {
+          "title": "Intent",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/AnswerabilityOutcome"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "top_chunk_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Chunk Url"
+        }
+      },
+      "required": [
+        "query",
+        "intent",
+        "outcome",
+        "citable"
+      ],
+      "title": "AnswerabilityMatrixEntry",
+      "type": "object"
+    },
+    "AnswerabilityOutcome": {
+      "enum": [
+        "answerable",
+        "partial",
+        "ungrounded",
+        "unretrievable"
+      ],
+      "title": "AnswerabilityOutcome",
+      "type": "string"
+    },
+    "AnswerabilitySummary": {
+      "additionalProperties": false,
+      "properties": {
+        "answerable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answerable",
+          "type": "integer"
+        },
+        "partial": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Partial",
+          "type": "integer"
+        },
+        "ungrounded": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Ungrounded",
+          "type": "integer"
+        },
+        "unretrievable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unretrievable",
+          "type": "integer"
+        }
+      },
+      "title": "AnswerabilitySummary",
+      "type": "object"
+    },
+    "Artifact": {
+      "additionalProperties": false,
+      "description": "A machine-checkable proof for a finding. Hard rule: no artifact, no\nfinding -- every Finding.artifacts entry must resolve to a live URL a\nreader can re-check.",
+      "properties": {
+        "html_only_extract": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Html Only Extract"
+        },
+        "http_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Http Status"
+        },
+        "rendered_extract": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rendered Extract"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CSS selector or byte-offset locating the evidence",
+          "title": "Selector"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "Artifact",
+      "type": "object"
+    },
+    "Confidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Confidence",
+      "type": "string"
+    },
+    "Finding": {
+      "additionalProperties": false,
+      "description": "A single, stage-localized, artifact-backed defect.",
+      "properties": {
+        "affected_queries": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Queries",
+          "type": "array"
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/Artifact"
+          },
+          "minItems": 1,
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "impact_mechanism": {
+          "description": "Why this breaks retrieval/citation -- a mechanism, not a symptom",
+          "title": "Impact Mechanism",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage"
+        },
+        "suggested_action": {
+          "$ref": "#/$defs/SuggestedAction"
+        },
+        "taxonomy_id": {
+          "description": "e.g. RENDER-001, per references/taxonomy.md",
+          "title": "Taxonomy Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/Verification"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "severity",
+        "stage",
+        "taxonomy_id",
+        "scope",
+        "evidence",
+        "artifacts",
+        "confidence",
+        "verification",
+        "impact_mechanism",
+        "suggested_action"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "ProactiveRecommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "rationale": {
+          "description": "What measured gap this is derived from -- not a static list item",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "suggested_action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SuggestedAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "rationale"
+      ],
+      "title": "ProactiveRecommendation",
+      "type": "object"
+    },
+    "ReadinessStatus": {
+      "enum": [
+        "pass",
+        "partial",
+        "fail",
+        "skipped"
+      ],
+      "title": "ReadinessStatus",
+      "type": "string"
+    },
+    "RunManifest": {
+      "additionalProperties": false,
+      "description": "Determinism proof -- same site in, same report out, modulo audited_at.",
+      "properties": {
+        "degradations": {
+          "description": "Degradation-ladder steps taken under the 5-minute watchdog, recorded not hidden",
+          "items": {
+            "type": "string"
+          },
+          "title": "Degradations",
+          "type": "array"
+        },
+        "duration_s": {
+          "minimum": 0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "marketplace_version": {
+          "title": "Marketplace Version",
+          "type": "string"
+        },
+        "pages_crawled": {
+          "minimum": 0,
+          "title": "Pages Crawled",
+          "type": "integer"
+        },
+        "pages_rendered": {
+          "minimum": 0,
+          "title": "Pages Rendered",
+          "type": "integer"
+        },
+        "rule_pack_version": {
+          "title": "Rule Pack Version",
+          "type": "string"
+        },
+        "sample_seed": {
+          "title": "Sample Seed",
+          "type": "string"
+        },
+        "stages_completed": {
+          "items": {
+            "$ref": "#/$defs/Stage"
+          },
+          "title": "Stages Completed",
+          "type": "array"
+        }
+      },
+      "required": [
+        "marketplace_version",
+        "rule_pack_version",
+        "pages_crawled",
+        "pages_rendered",
+        "sample_seed",
+        "duration_s"
+      ],
+      "title": "RunManifest",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "description": "How many pages were checked vs. how many showed the defect. A\nfinding can't claim site-wide without this -- see finding-verification's\nsample-adequacy check.",
+      "properties": {
+        "affected": {
+          "minimum": 0,
+          "title": "Affected",
+          "type": "integer"
+        },
+        "checked": {
+          "minimum": 0,
+          "title": "Checked",
+          "type": "integer"
+        },
+        "page_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Class"
+        }
+      },
+      "required": [
+        "checked",
+        "affected"
+      ],
+      "title": "Scope",
+      "type": "object"
+    },
+    "Severity": {
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "Stage": {
+      "description": "The six funnel stages a brand can fall out at. Matches the skill\nthat owns each stage: crawl-reach-audit, render-gap-audit,\nextractability-audit, retrieval-simulation, trust-corroboration-audit,\narrival-engagement-audit.",
+      "enum": [
+        "reach",
+        "render",
+        "extract",
+        "retrieve",
+        "cite",
+        "arrive"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "SuggestedAction": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "effort": {
+          "title": "Effort",
+          "type": "string"
+        },
+        "impact": {
+          "title": "Impact",
+          "type": "string"
+        },
+        "implementation": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Implementation",
+          "type": "array"
+        },
+        "priority": {
+          "$ref": "#/$defs/Severity"
+        },
+        "rationale_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale Ref"
+        },
+        "stage_unblocked": {
+          "$ref": "#/$defs/Stage"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "verification_step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A one-liner the reader can run to confirm the fix worked",
+          "title": "Verification Step"
+        }
+      },
+      "required": [
+        "summary",
+        "priority",
+        "impact",
+        "effort",
+        "confidence",
+        "stage_unblocked"
+      ],
+      "title": "SuggestedAction",
+      "type": "object"
+    },
+    "Summary": {
+      "additionalProperties": false,
+      "properties": {
+        "ai_readiness": {
+          "$ref": "#/$defs/AIReadiness"
+        },
+        "answerability": {
+          "$ref": "#/$defs/AnswerabilitySummary"
+        },
+        "critical": {
+          "minimum": 0,
+          "title": "Critical",
+          "type": "integer"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "high": {
+          "minimum": 0,
+          "title": "High",
+          "type": "integer"
+        },
+        "low": {
+          "minimum": 0,
+          "title": "Low",
+          "type": "integer"
+        },
+        "medium": {
+          "minimum": 0,
+          "title": "Medium",
+          "type": "integer"
+        },
+        "total_findings": {
+          "minimum": 0,
+          "title": "Total Findings",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_findings",
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "ai_readiness",
+        "answerability",
+        "headline"
+      ],
+      "title": "Summary",
+      "type": "object"
+    },
+    "Verification": {
+      "additionalProperties": false,
+      "description": "Output of the falsification pass (finding-verification skill).",
+      "properties": {
+        "contradicting_signals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Contradicting Signals",
+          "type": "array"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "reproduced": {
+          "title": "Reproduced",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "reproduced",
+        "method"
+      ],
+      "title": "Verification",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The single validated report the orchestrator assembles. Superset of\nthe required floor: site, audited_at, summary, and per-finding id/\ntitle/severity/evidence/suggested_action.",
+  "properties": {
+    "answerability_matrix": {
+      "items": {
+        "$ref": "#/$defs/AnswerabilityMatrixEntry"
+      },
+      "title": "Answerability Matrix",
+      "type": "array"
+    },
+    "audited_at": {
+      "format": "date-time",
+      "title": "Audited At",
+      "type": "string"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    },
+    "observations": {
+      "description": "Findings that failed falsification -- demoted, never silently dropped",
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "proactive_recommendations": {
+      "items": {
+        "$ref": "#/$defs/ProactiveRecommendation"
+      },
+      "title": "Proactive Recommendations",
+      "type": "array"
+    },
+    "run_manifest": {
+      "$ref": "#/$defs/RunManifest"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "site": {
+      "title": "Site",
+      "type": "string"
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    }
+  },
+  "required": [
+    "site",
+    "audited_at",
+    "run_manifest",
+    "summary"
+  ],
+  "title": "AuditReport",
+  "type": "object"
+}

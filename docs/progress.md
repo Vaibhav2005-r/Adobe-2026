@@ -29,9 +29,26 @@ Tracks DoD completion against `docs/build-plan.md` Part 7, one entry per day. Up
 ---
 
 ## Day 2 — Sat 29 Aug · Contracts + scaffolding
-**Status:** not started
+**Status:** done
 
-**DoD:** `run_audit.py` crawls a site, emits a schema-valid report with zero findings. Skeleton end-to-end before any detector exists.
+- [x] `marketplace.json` with exactly one entrypoint (`ai-visibility-orchestrator`); all 8 skill folders with valid stub `SKILL.md` (name matches folder, only legal frontmatter keys used -- confirmed against the actual `skills-ref` validator source, not guessed: `name`, `description`, `license`, `allowed-tools`, `metadata`, `compatibility`)
+- [x] `skills-ref validate` green on all 8 (via `npx skills-ref`, real Anthropic package, not a stand-in)
+- [x] Pydantic v2 models (`src/brand_audit/models.py`): `Finding`, `Artifact`, `StageResult`, `AuditReport`, plus `Scope`/`Verification`/`SuggestedAction`/`RunManifest`/`Summary`/etc.; `report_schema.json` generated from them via `scripts/gen_schema.py` (CI checks for drift)
+- [x] Crawl core (`src/brand_audit/crawl.py`, `fetch.py`, `artifact_store.py`): `protego`-based robots/AI-UA policy, sitemap discovery (index + urlset), deterministic stratified sampler (seeded by `sha256(domain)`, time-independent), `BudgetManager` with an ordered degradation ladder, concurrent polite fetch, artifact persistence to `runs/<domain>/artifacts/`
+- [x] CI wired (`.github/workflows/ci.yml` at the repo root): `skills-ref validate` x8, manifest lint, schema-drift check, pytest smoke suite -- all run against a local fixture server, no live network dependency
+- [x] **DoD met:** `run_audit.py` crawls a real site (tested against docs.python.org and a local fixture) and emits a schema-valid report with zero findings. Confirmed deterministic: two runs, byte-identical modulo `audited_at`/`duration_s` (`tests/test_smoke.py::test_determinism_across_runs`).
+
+**Notes:**
+
+*skills-ref, for real:* rather than guess at the "6 legal frontmatter keys" CLAUDE.md mentions, read the actual validator source (`npx skills-ref` pulls the real `skills-ref` npm package) at `validator.js` -- confirmed the allowed set, the name-format rules (lowercase, <=64 chars, no leading/trailing/double hyphens, must match directory name after NFKC normalization), and the description length cap (<=1024 chars). This is why every SKILL.md passed validation on the first real run, not after several rounds of guessing.
+
+*marketplace.json format assumption, flagged explicitly:* `skills-ref` has no marketplace-level schema of its own -- "marketplace.json, exactly one entrypoint" is the hackathon brief's own convention, and the original brief document isn't available in this session, only CLAUDE.md's summary of it. Modeled the file on Anthropic's own real `.claude-plugin/marketplace.json` (fetched from `anthropics/skills` on GitHub) -- `name`/`owner`/`metadata`/`plugins[].skills`. "Exactly one entrypoint" is expressed two ways: (1) a custom `metadata.entrypoint` field naming `ai-visibility-orchestrator`, checked by `lint_marketplace.py`; (2) every other skill's `description` is worded as "internal pipeline stage ... not meant to be invoked directly" so it wouldn't get triggered by a generic user request even though it's a technically valid, independently-invocable skill. Worth double-checking against the actual brief if it turns up.
+
+*Where shared code lives:* the build plan's file tree only shows `scripts/` explicitly under `ai-visibility-orchestrator/`; it doesn't say where cross-stage code (Pydantic models, crawl core) should live. Put it in `src/brand_audit/` as a proper installable package (`pyproject.toml` + `pip install -e .`) rather than duplicating models across 8 skill folders -- every stage's future `scripts/` imports from it. This keeps each skill's own `scripts/` thin and stage-specific, which is what the composition story needs (see `references/composition.md`).
+
+*Determinism bug caught by the smoke test:* first local-fixture run showed `0/1 sampled pages reachable` -- turned out `run_audit.py`'s site-normalization always prepends `https://` when no scheme is given, which silently broke against the plain-HTTP local fixture server. Not a real bug for actual audit targets (real sites serve HTTPS), but worth remembering: `run_audit.py http://localhost:PORT` needs the explicit scheme for local/test use.
+
+*Next session should:* start Day 3 (stage ① REACH detectors + stage ② RENDER dual-fetch differential). The REACH detector layer has real material to work from already -- `REACH-001`/`REACH-002`/`REACH-003` in `references/taxonomy.md` are three field-verified mechanisms ready to become actual `Finding`-emitting code, not hypothetical rules. Same for `RENDER-001`. This should make Day 3 mostly translation (taxonomy entry -> detector) rather than fresh discovery.
 
 ## Day 3 — Sun 30 Aug · Stage ① REACH + Stage ② RENDER
 **Status:** not started
