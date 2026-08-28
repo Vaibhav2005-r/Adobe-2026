@@ -51,6 +51,21 @@
           "title": "Query",
           "type": "string"
         },
+        "top_chunk_position_ratio": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far into the page's main content the cited chunk sits (0.0 = start, 1.0 = end). Lets stage (6) ARRIVE ask 'is the citable answer above the fold' without re-deriving chunk positions from scratch -- retrieval-simulation already computes this once.",
+          "title": "Top Chunk Position Ratio"
+        },
         "top_chunk_url": {
           "anyOf": [
             {

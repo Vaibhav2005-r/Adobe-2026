@@ -2,9 +2,9 @@
 """Pipeline driver: crawl a site, run whatever stages are wired up, emit a
 schema-valid AuditReport.
 
-Day 6 milestone: stage (1) REACH through stage (5) CITE are wired up.
-Stage (6) ARRIVE doesn't exist yet, so its ai_readiness field reports
-"skipped", not "pass".
+Day 7 milestone: all six funnel stages, REACH through ARRIVE, are wired
+up. Only `finding-verification` (the cross-cutting falsification pass)
+and dedup/merge remain -- Day 8 work.
 
 Usage:
     python run_audit.py example.com
@@ -33,6 +33,8 @@ _RETRIEVE_SCRIPTS = Path(__file__).resolve().parents[2] / "retrieval-simulation"
 sys.path.insert(0, str(_RETRIEVE_SCRIPTS))
 _TRUST_SCRIPTS = Path(__file__).resolve().parents[2] / "trust-corroboration-audit" / "scripts"
 sys.path.insert(0, str(_TRUST_SCRIPTS))
+_ARRIVE_SCRIPTS = Path(__file__).resolve().parents[2] / "arrival-engagement-audit" / "scripts"
+sys.path.insert(0, str(_ARRIVE_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
@@ -212,7 +214,7 @@ def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResu
 
 def run_retrieve_stage(
     reach_corpus_urls: list[str], reach_outcomes: list, render_result: StageResult | None, base_url: str
-) -> tuple[StageResult, list]:
+) -> tuple[StageResult, list, retrieve_detect.Entity]:
     """The answerability probe. Composition contract: consumes the
     stage (1) survivors, minus any page stage (2) proved is an empty
     JS-only shell -- there's genuinely nothing on such a page for a
@@ -251,7 +253,7 @@ def run_retrieve_stage(
             "entity_source": entity.source,
         },
     )
-    return stage_result, matrix
+    return stage_result, matrix, entity
 
 
 def run_cite_stage(corpus_urls: list[str], reach_outcomes: list, base_url: str) -> StageResult:
@@ -282,6 +284,49 @@ def run_cite_stage(corpus_urls: list[str], reach_outcomes: list, base_url: str) 
         findings=findings,
         corpus_delta=list(pages),
         metrics={"pages_checked": len(pages)},
+    )
+
+
+def run_arrive_stage(
+    reach_corpus_urls: list[str], reach_outcomes: list, matrix: list, entity: retrieve_detect.Entity
+) -> StageResult:
+    """Mid-task arrival model. Composition contract: reads the
+    answerability_matrix stage (4) already computed -- `citable=True`
+    entries ARE the pages most likely to be cited, a more precise
+    definition than re-deriving "likely to be cited" from scratch, and
+    it's the literal set this stage's own persona framing refers to. No
+    new fetches: ENGAGE-003 (context reset) and ENGAGE-007 (scoped
+    latency) reuse the FetchRecord stage (1) already captured per page
+    (`final_url`, `elapsed_s`); ENGAGE-006 (instrumentation) checks the
+    full stage (1) survivor set, since analytics snippets are typically
+    injected site-wide, not per-page."""
+    import arrive_detect
+
+    record_by_url = {o.url: o.record for o in reach_outcomes if o.record is not None}
+    all_pages = {url: record.text for url, record in record_by_url.items()}
+
+    citable_urls = sorted({e.top_chunk_url for e in matrix if e.citable and e.top_chunk_url})
+    citable_pages = {u: all_pages[u] for u in citable_urls if u in all_pages}
+    citable_records = {u: record_by_url[u] for u in citable_urls if u in record_by_url}
+
+    # Fall back to the full REACH survivor set if nothing in the corpus
+    # won a query (e.g. a tiny fixture, or every query came back
+    # UNRETRIEVABLE) -- the alternative is auditing nothing at all for
+    # arrival/engagement on a site that still has real pages to check.
+    if not citable_pages:
+        citable_urls = sorted(u for u in reach_corpus_urls if u in all_pages)
+        citable_pages = {u: all_pages[u] for u in citable_urls}
+        citable_records = {u: record_by_url[u] for u in citable_urls if u in record_by_url}
+
+    findings = arrive_detect.run_arrival_engagement_audit(
+        citable_pages, citable_records, all_pages, matrix, entity.name
+    )
+
+    return StageResult(
+        stage=Stage.ARRIVE,
+        findings=findings,
+        corpus_delta=citable_urls,
+        metrics={"citable_pages_checked": len(citable_pages), "total_pages_checked": len(all_pages)},
     )
 
 
@@ -355,10 +400,11 @@ async def main_async(args: argparse.Namespace) -> int:
     # RETRIEVE is also pure computation (chunking + BM25 are in-memory,
     # no network) -- same budget-gating rationale as EXTRACT.
     answerability_matrix = []
+    retrieve_entity = None  # stays None if skipped -- run_arrive_stage needs to know either way, same pattern as render_result
     if budget.over_budget():
         degradations.append("retrieve_stage_skipped_low_budget")
     else:
-        retrieve_result, answerability_matrix = run_retrieve_stage(
+        retrieve_result, answerability_matrix, retrieve_entity = run_retrieve_stage(
             reach_result.corpus_delta, reach_outcomes, render_result, site
         )
         stage_results.append(retrieve_result)
@@ -370,6 +416,19 @@ async def main_async(args: argparse.Namespace) -> int:
     else:
         cite_result = run_cite_stage(reach_result.corpus_delta, reach_outcomes, site)
         stage_results.append(cite_result)
+
+    # ARRIVE reads RETRIEVE's own output (the answerability_matrix), so
+    # it's gated on RETRIEVE having actually run, not just on budget --
+    # composition contract, not an independent stage.
+    if budget.over_budget():
+        degradations.append("arrive_stage_skipped_low_budget")
+    elif retrieve_entity is None:
+        degradations.append("arrive_stage_skipped_retrieve_unavailable")
+    else:
+        arrive_result = run_arrive_stage(
+            reach_result.corpus_delta, reach_outcomes, answerability_matrix, retrieve_entity
+        )
+        stage_results.append(arrive_result)
 
     duration_s = time.monotonic() - start
 

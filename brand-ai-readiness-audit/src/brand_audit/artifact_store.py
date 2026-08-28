@@ -20,6 +20,7 @@ class FetchRecord:
     fetched_with_ua: str
     headers: dict[str, str] = None  # type: ignore[assignment]
     final_url: str | None = None  # after redirects, if any were followed
+    elapsed_s: float | None = None  # httpx's send-to-response-received latency
 
     def __post_init__(self) -> None:
         if self.headers is None:

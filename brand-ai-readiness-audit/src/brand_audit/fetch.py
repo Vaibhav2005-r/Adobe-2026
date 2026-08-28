@@ -62,6 +62,7 @@ async def fetch_many(
                 fetched_with_ua=user_agent,
                 headers=dict(resp.headers),
                 final_url=str(resp.url) if str(resp.url) != url else None,
+                elapsed_s=resp.elapsed.total_seconds(),
             )
             return FetchOutcome(url=url, record=record)
 
