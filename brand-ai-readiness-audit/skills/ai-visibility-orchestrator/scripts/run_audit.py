@@ -29,6 +29,7 @@ _RENDER_SCRIPTS = Path(__file__).resolve().parents[2] / "render-gap-audit" / "sc
 sys.path.insert(0, str(_RENDER_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
+    DEFAULT_FETCH_UA,
     BudgetManager,
     discover_sitemap_urls,
     fetch_robots,
@@ -61,14 +62,22 @@ async def run_reach_stage(
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         robots = await fetch_robots(client, base_url)
-        sitemap_urls = await discover_sitemap_urls(client, base_url, robots)
+        sitemap_urls, sitemap_fetch_ok = await discover_sitemap_urls(client, base_url, robots)
 
     domain = urlparse(base_url).netloc
     seed = sample_seed_for(domain)
     sample = stratified_sample(sitemap_urls, seed, max_pages=max_pages)
 
-    outcomes = await fetch_many(sample)  # follows redirects -- final content
-    no_redirect_outcomes = await fetch_many(sample, follow_redirects=False)  # immediate response
+    # Robots-respecting is a hard constraint (CLAUDE.md), not a courtesy:
+    # only fetch URLs our own crawl UA is actually allowed to. The
+    # REACH-001 detector below still checks the *full* sample for named
+    # AI-bot rules -- that's a robots.txt rule lookup, not a fetch, so it
+    # can safely see paths we never touch ourselves.
+    crawl_targets = [u for u in sample if robots.allowed(u, DEFAULT_FETCH_UA)]
+    excluded_by_robots = len(sample) - len(crawl_targets)
+
+    outcomes = await fetch_many(crawl_targets)  # follows redirects -- final content
+    no_redirect_outcomes = await fetch_many(crawl_targets, follow_redirects=False)  # immediate response
 
     store = ArtifactStore(run_dir)
     corpus_delta: list[str] = []
@@ -82,11 +91,11 @@ async def run_reach_stage(
             corpus_delta.append(outcome.url)
 
     findings = []
-    findings += reach_detect.detect_ai_ua_block(base_url, robots, base_url)
+    findings += reach_detect.detect_ai_ua_block(base_url, robots, sample)
     findings += reach_detect.detect_locale_redirect(base_url, no_redirect_outcomes)
     findings += reach_detect.detect_soft_404(base_url, outcomes)
     findings += reach_detect.detect_canonical_issues(base_url, outcomes)
-    findings += reach_detect.detect_sitemap_health(base_url, robots, sitemap_reachable=bool(sitemap_urls))
+    findings += reach_detect.detect_sitemap_health(base_url, robots, sitemap_reachable=sitemap_fetch_ok)
 
     if not robots.fetched:
         waf_probe = await probe_user_agents(base_url, reach_detect.WAF_PROBE_UAS)
@@ -100,6 +109,7 @@ async def run_reach_stage(
         metrics={
             "pages_discovered": len(sitemap_urls),
             "pages_sampled": len(sample),
+            "pages_excluded_by_robots": excluded_by_robots,
             "pages_fetched_ok": fetched_ok,
             "robots_fetched": robots.fetched,
         },
@@ -107,17 +117,24 @@ async def run_reach_stage(
     return stage_result, outcomes, seed
 
 
+MIN_RENDER_BUDGET_S = 30.0  # not worth paying Chromium startup cost for less than this
+
+
 async def run_render_stage(
-    corpus_urls: list[str], reach_outcomes: list, max_render_pages: int
+    corpus_urls: list[str], reach_outcomes: list, max_render_pages: int, budget: BudgetManager
 ) -> tuple[StageResult | None, str | None]:
     """Dual-fetch differential over the stage (1) survivors. Returns
     (StageResult, None) on success, or (None, degradation_reason) if
-    playwright isn't installed -- the caller must NOT run this stage's
-    findings in that case, per the "never guess" rule."""
+    playwright isn't installed, or budget is too tight to be worth
+    starting -- the caller must NOT run this stage's findings in either
+    case, per the "never guess" rule."""
     try:
         from playwright.async_api import async_playwright  # noqa: F401
     except ImportError:
         return None, "render_stage_skipped_no_playwright"
+
+    if budget.remaining() < MIN_RENDER_BUDGET_S:
+        return None, "render_stage_skipped_low_budget"
 
     import render_detect
 
@@ -130,17 +147,26 @@ async def run_render_stage(
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
     findings = []
+    render_failed = 0
+    compared: list[str] = []
     for url in targets:
-        comparison = render_detect.compare(
-            url, raw_by_url[url], rendered_html.get(url, ""), today_iso=today_iso
-        )
+        rendered = rendered_html.get(url)
+        if rendered is None:
+            # Render failed/timed out -- comparing against "" would risk
+            # a false RENDER-001 (raw substantial, "rendered" empty is
+            # exactly backwards from the real signal) or silently
+            # mask a real one. Skip rather than guess either way.
+            render_failed += 1
+            continue
+        compared.append(url)
+        comparison = render_detect.compare(url, raw_by_url[url], rendered, today_iso=today_iso)
         findings += render_detect.detect_render_gap(comparison)
 
     stage_result = StageResult(
         stage=Stage.RENDER,
         findings=findings,
-        corpus_delta=list(targets),
-        metrics={"pages_rendered": len(targets)},
+        corpus_delta=compared,
+        metrics={"pages_rendered": len(compared), "pages_render_failed": render_failed},
     )
     return stage_result, None
 
@@ -155,10 +181,30 @@ async def main_async(args: argparse.Namespace) -> int:
 
     start = time.monotonic()
     try:
-        reach_result, reach_outcomes, sample_seed = await run_reach_stage(site, args.max_pages, run_dir)
+        reach_result, reach_outcomes, sample_seed = await asyncio.wait_for(
+            run_reach_stage(site, args.max_pages, run_dir), timeout=budget.remaining()
+        )
     except httpx.HTTPError as exc:
         print(f"error: could not reach {site}: {exc}", file=sys.stderr)
         return 1
+    except asyncio.TimeoutError:
+        # The hard watchdog itself: never run past the budget, and never
+        # fail silently -- still emit a valid, honest (empty) report
+        # rather than crash or hang.
+        print(f"error: stage REACH exceeded the {budget.total_budget_s:.0f}s time budget for {site}", file=sys.stderr)
+        report = assemble_report(
+            site=domain,
+            stage_results=[],
+            duration_s=budget.elapsed(),
+            sample_seed=sample_seed_for(domain),
+            pages_crawled=0,
+            pages_rendered=0,
+            degradations=["reach_stage_timed_out_budget_exhausted"],
+        )
+        out_path = Path(args.out) if args.out else run_dir / "report.json"
+        out_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        print(f"Degraded report written to {out_path}")
+        return 0
 
     stage_results = [reach_result]
     degradations = list(budget.degradations)
@@ -167,9 +213,13 @@ async def main_async(args: argparse.Namespace) -> int:
     if args.skip_render:
         degradations.append("render_stage_skipped_by_flag")
     else:
-        render_result, degradation = await run_render_stage(
-            reach_result.corpus_delta, reach_outcomes, args.max_render_pages
-        )
+        try:
+            render_result, degradation = await asyncio.wait_for(
+                run_render_stage(reach_result.corpus_delta, reach_outcomes, args.max_render_pages, budget),
+                timeout=budget.remaining(),
+            )
+        except asyncio.TimeoutError:
+            render_result, degradation = None, "render_stage_timed_out_budget_exhausted"
         if render_result is not None:
             stage_results.append(render_result)
             pages_rendered = render_result.metrics.get("pages_rendered", 0)
@@ -183,7 +233,7 @@ async def main_async(args: argparse.Namespace) -> int:
         stage_results=stage_results,
         duration_s=duration_s,
         sample_seed=sample_seed,
-        pages_crawled=reach_result.metrics["pages_sampled"],
+        pages_crawled=reach_result.metrics["pages_fetched_ok"],  # successfully fetched, not merely attempted
         pages_rendered=pages_rendered,
         degradations=degradations,
     )

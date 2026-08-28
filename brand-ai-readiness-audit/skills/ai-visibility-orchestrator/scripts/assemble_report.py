@@ -43,6 +43,8 @@ _STAGE_TO_READINESS_FIELD = {
     Stage.ARRIVE: "arrive",
 }
 
+_SEVERITY_RANK = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3}
+
 
 def _readiness_for_stage(stage_results: list[StageResult], stage: Stage) -> ReadinessStatus:
     matching = [r for r in stage_results if r.stage == stage]
@@ -81,10 +83,14 @@ def assemble_report(
         }
     )
 
+    # The most severe finding, not just the first one by stage-concatenation
+    # order -- a report where REACH happens to run before RENDER shouldn't
+    # headline a low-severity canonical nit over a critical empty-JS-shell
+    # finding just because REACH's findings list came first.
     headline = (
         "No findings on the stages that ran -- audit skeleton only, detectors not yet wired up."
         if not findings
-        else findings[0].title
+        else min(findings, key=lambda f: _SEVERITY_RANK[f.severity]).title
     )
 
     summary = Summary(

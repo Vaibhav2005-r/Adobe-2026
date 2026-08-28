@@ -72,3 +72,18 @@ def test_clean_control_fixture_stays_silent(tmp_path):
     render_findings = [f for f in report["findings"] if f["stage"] == "render"]
     assert render_findings == []
     assert report["summary"]["ai_readiness"]["render"] == "pass"
+
+
+def test_render_failure_is_none_not_empty_string():
+    # A render that fails/times out must be distinguishable from a page
+    # that genuinely rendered to nothing -- conflating the two would make
+    # a real RENDER-001 case (raw substantial, render genuinely failed)
+    # silently vanish instead of being flagged or at least surfaced as
+    # unknown. Port 8199 has nothing listening -- goto() will error.
+    import asyncio
+
+    sys.path.insert(0, str(REPO_ROOT / "skills" / "render-gap-audit" / "scripts"))
+    import render_detect
+
+    results = asyncio.run(render_detect.render_fetch(["http://localhost:8199/nothing-here"], timeout_ms=3000))
+    assert results["http://localhost:8199/nothing-here"] is None

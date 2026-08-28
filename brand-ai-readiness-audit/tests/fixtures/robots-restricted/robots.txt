@@ -1,0 +1,5 @@
+Sitemap: http://localhost:8125/sitemap.xml
+
+User-agent: *
+Disallow: /staff-directory.html
+Allow: /

@@ -84,14 +84,23 @@ async def fetch_robots(client: httpx.AsyncClient, base_url: str) -> RobotsPolicy
 
 async def discover_sitemap_urls(
     client: httpx.AsyncClient, base_url: str, robots: RobotsPolicy, max_urls: int = 500
-) -> list[str]:
+) -> tuple[list[str], bool]:
     """Sitemap-first URL discovery. Falls back to /sitemap.xml, then to
     just the homepage if nothing is declared -- the sampler still runs,
-    it just has less to choose from (recorded, not fatal)."""
+    it just has less to choose from (recorded, not fatal).
+
+    Returns (urls, sitemap_fetch_ok). `sitemap_fetch_ok` tracks whether a
+    *declared* sitemap was actually fetched and parsed successfully --
+    kept separate from `urls` because `urls` always falls back to
+    `[base_url]` when discovery yields nothing, which would otherwise
+    make "did the sitemap work" indistinguishable from "we have a URL to
+    sample" (see REACH-006 / detect_sitemap_health, which needs the
+    former, not the latter)."""
 
     candidates = list(robots.sitemap_urls) or [urljoin(base_url, "/sitemap.xml")]
     urls: list[str] = []
     seen_sitemaps: set[str] = set()
+    sitemap_fetch_ok = False
 
     while candidates and len(urls) < max_urls:
         sitemap_url = candidates.pop(0)
@@ -108,6 +117,7 @@ async def discover_sitemap_urls(
             root = ElementTree.fromstring(resp.content)
         except ElementTree.ParseError:
             continue
+        sitemap_fetch_ok = True
 
         tag = root.tag.lower()
         ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -122,7 +132,7 @@ async def discover_sitemap_urls(
 
     if not urls:
         urls = [base_url]
-    return urls[:max_urls]
+    return urls[:max_urls], sitemap_fetch_ok
 
 
 def sample_seed_for(domain: str) -> str:
