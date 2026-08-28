@@ -17,7 +17,8 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from brand_audit.artifact_store import ArtifactStore  # noqa: E402
+from selectolax.parser import HTMLParser  # noqa: E402
+
 from brand_audit.crawl import AI_USER_AGENTS, RobotsPolicy  # noqa: E402
 from brand_audit.fetch import FetchOutcome  # noqa: E402
 from brand_audit.models import (  # noqa: E402
@@ -47,22 +48,41 @@ def _unverified() -> Verification:
     return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
 
 
-def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_url: str) -> list[Finding]:
-    """REACH-001: named AI crawlers explicitly disallowed."""
-    if not robots.fetched:
+def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_urls: list[str]) -> list[Finding]:
+    """REACH-001: named AI crawlers explicitly disallowed.
+
+    Checks every sampled URL, not just the homepage -- robots.txt rules
+    can be path-scoped (e.g. `Disallow: /products` only), and a brand
+    that blocks AI bots from its entire product catalog while leaving
+    the homepage open would be invisible to this detector if it only
+    ever checked `/`. This is a pure robots.txt rule lookup (no network
+    fetch), so it's safe to run over the full sample regardless of
+    which of those pages we actually end up crawling.
+    """
+    if not robots.fetched or not sample_urls:
         return []
-    blocked = robots.disallowed_ai_uas(sample_url)
+    per_url_blocked = {url: robots.disallowed_ai_uas(url) for url in sample_urls}
+    blocked = sorted(set().union(*per_url_blocked.values())) if per_url_blocked else []
     if not blocked:
         return []
+    pages_affected = sum(1 for b in per_url_blocked.values() if b)
 
-    # Deliberately a threshold, not exact equality: nytimes.com's
-    # robots.txt blocks 11 of 12 named bots but allows plain "Applebot"
-    # (distinct from "Applebot-Extended", which it does block) -- Apple's
-    # own documented split between search-indexing and AI-training bots.
-    # Requiring literal 100% would under-count this as a partial block
-    # when it's functionally a site-wide one; >=90% still won't fire on a
-    # genuinely partial block (e.g. 1 of 12 named bots disallowed).
-    site_wide = len(blocked) / len(AI_USER_AGENTS) >= 0.9
+    # Deliberately thresholds, not exact equality, and deliberately
+    # two-dimensional (bots blocked x pages affected):
+    #
+    # nytimes.com's robots.txt blocks 11 of 12 named bots but allows
+    # plain "Applebot" (distinct from "Applebot-Extended", which it does
+    # block) -- Apple's own documented split between search-indexing and
+    # AI-training bots. Requiring literal 100% bot coverage would
+    # under-count this as partial when it's functionally site-wide.
+    #
+    # Separately, a rule scoped to one path (e.g. `Disallow: /products`)
+    # can block 100% of named bots *for that path* without being
+    # site-wide at all -- that's what page_coverage guards against, now
+    # that this checks every sampled URL instead of just the homepage.
+    bot_coverage = len(blocked) / len(AI_USER_AGENTS)
+    page_coverage = pages_affected / len(sample_urls)
+    site_wide = bot_coverage >= 0.9 and page_coverage >= 0.9
     blast = BlastRadius.SITE_WIDE if site_wide else BlastRadius.DEGRADES
     confidence = Confidence.HIGH  # directly parsed from robots.txt, unambiguous
     severity = compute_severity(Stage.REACH, blast, confidence)
@@ -75,10 +95,10 @@ def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_url: str) -> list
             severity=severity,
             stage=Stage.REACH,
             taxonomy_id="REACH-001",
-            scope=Scope(checked=len(AI_USER_AGENTS), affected=len(blocked)),
+            scope=Scope(checked=len(sample_urls), affected=pages_affected),
             evidence=(
                 f"robots.txt at {urlparse(site).scheme}://{urlparse(site).netloc}/robots.txt "
-                f"disallows: {', '.join(sorted(blocked))}"
+                f"disallows: {', '.join(sorted(blocked))} (on {pages_affected}/{len(sample_urls)} sampled pages)"
             ),
             artifacts=[
                 Artifact(
@@ -315,14 +335,22 @@ def detect_canonical_issues(site: str, outcomes: list[FetchOutcome]) -> list[Fin
     chosen to avoid flagging the (very common, non-defective) absence of
     a canonical tag entirely."""
     findings = []
-    canonical_re = re.compile(
-        r'<link[^>]+rel=["\']canonical["\'][^>]*href=["\']([^"\']+)["\']', re.IGNORECASE
-    )
     for outcome in outcomes:
         rec = outcome.record
         if rec is None or rec.http_status != 200:
             continue
-        matches = canonical_re.findall(rec.text)
+        # A real HTML parser, not a regex: `<link href=".." rel="canonical">`
+        # (attribute order reversed from the more common
+        # `rel=".." href="..">`) is valid HTML that a hand-rolled regex
+        # requiring `rel=` before `href=` in source order would silently
+        # miss -- selectolax is already a project dependency for exactly
+        # this kind of parsing.
+        tree = HTMLParser(rec.text)
+        matches = [
+            node.attributes.get("href", "")
+            for node in tree.css('link[rel="canonical"]')
+            if node.attributes.get("href")
+        ]
         if len(matches) > 1 and len(set(matches)) > 1:
             confidence = Confidence.MEDIUM
             severity = compute_severity(Stage.REACH, BlastRadius.DEGRADES, confidence)

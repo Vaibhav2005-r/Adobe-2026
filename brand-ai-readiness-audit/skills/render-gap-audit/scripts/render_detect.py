@@ -219,23 +219,40 @@ def detect_render_gap(comparison: RenderComparison) -> list[Finding]:
     return findings
 
 
-async def render_fetch(urls: list[str], *, timeout_ms: int = 15000) -> dict[str, str]:
+async def render_fetch(urls: list[str], *, timeout_ms: int = 15000) -> dict[str, str | None]:
     """Render each URL with headless Chromium, return {url: rendered_html}.
+    A value of `None` means the render itself failed or timed out --
+    callers must treat that as "unknown", not "confirmed empty": a page
+    that never reaches networkidle (persistent websockets, analytics
+    polling -- real sites do this, e.g. curve.finance during Day 1 field
+    research) would otherwise silently collapse to an empty string
+    indistinguishable from a genuine JS-only-empty-shell case, which
+    would make a real RENDER-001 case go undetected rather than flagged
+    -- exactly backwards from what a detector should fail toward.
+
     Raises ImportError if playwright isn't installed -- caller decides
     whether to skip the stage entirely (it should)."""
     from playwright.async_api import async_playwright  # deferred: optional dep
 
-    results: dict[str, str] = {}
+    results: dict[str, str | None] = {}
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         try:
             for url in urls:
                 page = await browser.new_page()
                 try:
-                    await page.goto(url, timeout=timeout_ms, wait_until="networkidle")
+                    # "load" rather than "networkidle": networkidle never
+                    # fires on pages with persistent connections (some
+                    # analytics/websocket setups keep the network "busy"
+                    # forever), which would otherwise burn the full
+                    # timeout on every such page. The short extra wait
+                    # covers synchronous on-load JS (our own js-only-price
+                    # fixture included) without networkidle's fragility.
+                    await page.goto(url, timeout=timeout_ms, wait_until="load")
+                    await page.wait_for_timeout(500)
                     results[url] = await page.content()
                 except Exception as exc:  # noqa: BLE001 -- a single page's render failure shouldn't abort the run
-                    results[url] = ""
+                    results[url] = None
                     print(f"warning: render failed for {url}: {exc}", file=sys.stderr)
                 finally:
                     await page.close()
