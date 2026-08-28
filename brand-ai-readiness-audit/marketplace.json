@@ -1,0 +1,30 @@
+{
+  "name": "brand-ai-readiness-audit",
+  "owner": {
+    "name": "Vaibhav",
+    "email": "caffienatedcompilers@gmail.com"
+  },
+  "metadata": {
+    "description": "Simulates the AI-assistant retrieval pipeline (reach -> render -> extract -> retrieve -> cite -> arrive) and reports the exact stage where a brand falls out, artifact-backed and falsified before it ships.",
+    "version": "0.1.0",
+    "entrypoint": "ai-visibility-orchestrator"
+  },
+  "plugins": [
+    {
+      "name": "brand-ai-readiness-audit",
+      "description": "Audits a website's visibility to AI assistants by simulating the retrieval pipeline stage by stage. Invoke ai-visibility-orchestrator directly -- the other seven skills are internal pipeline stages it drives via scripts/run_audit.py, not independent entry points.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/ai-visibility-orchestrator",
+        "./skills/crawl-reach-audit",
+        "./skills/render-gap-audit",
+        "./skills/extractability-audit",
+        "./skills/retrieval-simulation",
+        "./skills/trust-corroboration-audit",
+        "./skills/arrival-engagement-audit",
+        "./skills/finding-verification"
+      ]
+    }
+  ]
+}

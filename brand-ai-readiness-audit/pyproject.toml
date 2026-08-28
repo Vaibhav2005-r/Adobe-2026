@@ -1,0 +1,31 @@
+[project]
+name = "brand-ai-readiness-audit"
+version = "0.1.0"
+description = "Simulates the AI-assistant retrieval pipeline (reach -> render -> extract -> retrieve -> cite -> arrive) and reports the exact stage where a brand falls out."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "httpx[http2]>=0.27",
+    "protego>=0.3",
+    "selectolax>=0.3",
+    "lxml>=5.0",
+    "trafilatura>=1.8",
+    "extruct>=0.17",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+# Stage (2) render-gap-audit only. Absent -> render checks are skipped and
+# suppressed, never guessed at (see references/composition.md).
+render = ["playwright>=1.40"]
+# Chunk boundaries should match a real tokenizer when available; falls back
+# to a regex word-count approximation if tiktoken isn't installed.
+tokenize = ["tiktoken>=0.7"]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

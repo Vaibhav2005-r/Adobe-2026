@@ -1,0 +1,40 @@
+---
+name: crawl-reach-audit
+description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 1 REACH -- can a bot fetch the site at all -- via AI-user-agent robots.txt probes, status/soft-404 detection, canonical integrity, WAF/interstitial detection, and sitemap health.
+metadata:
+  role: stage
+  stage: reach
+---
+
+# crawl-reach-audit -- Stage ① REACH
+
+Answers: **can a bot fetch it?** If not, nothing downstream can work --
+REACH failures are the only findings that default to `critical` severity
+by blocking the whole funnel.
+
+## Detects
+
+- Explicit AI-crawler blocks in `robots.txt` (named UAs: GPTBot,
+  ChatGPT-User, ClaudeBot, anthropic-ai, Google-Extended, PerplexityBot,
+  CCBot, Bytespider, Applebot, ...) -- see `RENDER-001`-adjacent
+  `REACH-001` in `references/taxonomy.md` at the orchestrator.
+- Status/soft-404 detection, canonical tag integrity.
+- WAF/bot-challenge interstitials that block every UA regardless of
+  declared identity (not just a robots.txt policy decision) -- see
+  `REACH-003`.
+- Sitemap health (missing, stale, sitemap index depth).
+
+## Input / output contract
+
+Reads the shared `run_context` (site, budget remaining, sample seed).
+Writes a `StageResult` with `stage: reach`, findings (artifact-backed
+per `Finding.artifacts`), and `corpus_delta`: the URLs that survive this
+stage and get passed to `render-gap-audit`.
+
+## Status
+
+Crawl core (robots parsing, sitemap discovery, deterministic sampling,
+fetch) lives in `src/brand_audit/crawl.py` and is exercised by
+`ai-visibility-orchestrator/scripts/run_audit.py`. Detector logic that
+turns raw crawl data into `Finding`s is not yet implemented -- see
+`docs/progress.md` at the repo root.
