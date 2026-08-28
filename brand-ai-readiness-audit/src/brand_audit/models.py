@@ -214,6 +214,17 @@ class AnswerabilityMatrixEntry(BaseModel):
     outcome: AnswerabilityOutcome
     top_chunk_url: str | None = None
     citable: bool
+    top_chunk_position_ratio: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How far into the page's main content the cited chunk sits (0.0 = "
+            "start, 1.0 = end). Lets stage (6) ARRIVE ask 'is the citable "
+            "answer above the fold' without re-deriving chunk positions from "
+            "scratch -- retrieval-simulation already computes this once."
+        ),
+    )
 
 
 class ProactiveRecommendation(BaseModel):

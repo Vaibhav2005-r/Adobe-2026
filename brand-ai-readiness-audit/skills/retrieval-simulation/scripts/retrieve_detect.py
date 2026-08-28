@@ -17,10 +17,11 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from brand_audit.chunk import Chunk, chunk_page  # noqa: E402
+from brand_audit.chunk import Chunk, chunk_page, page_content_length  # noqa: E402
 from brand_audit.crawl import find_homepage_url  # noqa: E402
 from brand_audit.facts import extract_facts  # noqa: E402
 from brand_audit.jsonld import extract_json_ld, walk  # noqa: E402
@@ -72,14 +73,33 @@ _TITLE_SEPARATORS = re.compile(r"\s*[|\-–—:]\s*")
 class Entity:
     name: str
     category: str
-    source: str  # "json-ld" | "title" | "h1" | "fallback"
+    source: str  # "json-ld" | "title" | "h1" | "domain" | "fallback"
+
+
+def _domain_derived_name(homepage_url: str | None) -> str | None:
+    """Last-resort brand name derived from the audited domain itself --
+    e.g. "https://www.allbirds.com" -> "Allbirds". Always available
+    (homepage_url is always the site under audit) and, unlike guessing
+    from some sampled page's own title/h1, can't be hijacked by an
+    unrelated page. Not required to be linguistically perfect (a
+    multi-part domain like "example.co.uk" derives "Example", not
+    "Example UK") -- just a safe floor for query-template expansion."""
+    if not homepage_url:
+        return None
+    netloc = urlparse(homepage_url).netloc or homepage_url
+    netloc = netloc.split(":")[0]  # drop a port, if present
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    label = netloc.split(".")[0]
+    return label.capitalize() if label else None
 
 
 def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Entity:
     """Derive the brand's entity + category from the site itself --
-    JSON-LD Organization first (most reliable), then <title>, then
-    <h1>. Checked in deterministic order (sorted URLs) so the result
-    doesn't depend on dict/crawl ordering."""
+    JSON-LD Organization first (most reliable), then the homepage's own
+    <title>, then its <h1>, then a domain-derived name. Checked in
+    deterministic order (sorted URLs) so the result doesn't depend on
+    dict/crawl ordering."""
     # Two passes over every JSON-LD node, not return-on-first-match:
     # the organization name and the category signal are often on
     # *different* nodes (an Organization plus a sibling Product in the
@@ -106,24 +126,39 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
     # find_homepage_url matches by normalized root path, not exact string
     # equality against `homepage_url` -- see its docstring (brand_audit.
     # crawl) for why exact equality was a real bug here on Day 5.
+    #
+    # Deliberately NOT falling back further to *some other* sampled
+    # page's title/h1 when the homepage itself isn't among them (the
+    # original approach here, through Day 6). A deterministic stratified
+    # sample of N pages has no guarantee the bare domain root is even a
+    # sitemap entry -- confirmed directly against a real site: a live
+    # allbirds.com crawl never sampled "/" at all (not every sitemap
+    # lists the root), and falling back to "whichever sampled page
+    # sorts first" landed on https://www.allbirds.com/pages/design-system
+    # -- a real, legitimate page whose own <title> is literally "Design
+    # System", taken as the detected brand name for the entire audit
+    # purely because of alphabetical sort order. A domain-derived name
+    # is a strictly safer floor: it can't be hijacked by an unrelated
+    # subpage's own title the way "guess from any sampled page" could.
     resolved_homepage = find_homepage_url(pages, homepage_url)
-    candidates = [resolved_homepage] if resolved_homepage else []
-    candidates += [u for u in sorted(pages) if u not in candidates]
-
-    for url in candidates:
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", pages[url], re.IGNORECASE | re.DOTALL)
+    if resolved_homepage is not None:
+        html = pages[resolved_homepage]
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
         if title_match:
             raw = re.sub(r"<[^>]+>", "", title_match.group(1)).strip()
             parts = [p for p in _TITLE_SEPARATORS.split(raw) if p]
             if parts:
                 return Entity(name=parts[0], category=category, source="title")
 
-    for url in candidates:
-        h1_match = re.search(r"<h1[^>]*>(.*?)</h1>", pages[url], re.IGNORECASE | re.DOTALL)
+        h1_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.IGNORECASE | re.DOTALL)
         if h1_match:
             text = re.sub(r"<[^>]+>", "", h1_match.group(1)).strip()
             if text:
                 return Entity(name=text, category=category, source="h1")
+
+    domain_name = _domain_derived_name(homepage_url)
+    if domain_name:
+        return Entity(name=domain_name, category=category, source="domain")
 
     return Entity(name="the site", category=category, source="fallback")
 
@@ -423,9 +458,11 @@ def run_retrieval_simulation(
     queries = expand_queries(entity)
 
     chunks: list[Chunk] = []
+    page_lengths: dict[str, int] = {}
     for url in sorted(pages):
         main_html = trafilatura.extract(pages[url], output_format="html", include_formatting=True, include_images=False) or ""
         chunks += chunk_page(main_html, url)
+        page_lengths[url] = page_content_length(main_html)
 
     retriever = BM25Retriever()
     retriever.index(chunks)
@@ -435,12 +472,18 @@ def run_retrieval_simulation(
     unanswerable_examples: list[str] = []
     for query, intent in queries:
         outcome, top, cross_page = classify(query, intent, retriever, entity_tokens)
+        position_ratio = None
+        if top is not None:
+            total_length = page_lengths.get(top.chunk.url, 0)
+            if total_length > 0:
+                position_ratio = min(1.0, top.chunk.char_offset / total_length)
         entry = AnswerabilityMatrixEntry(
             query=query,
             intent=intent,
             outcome=outcome,
             top_chunk_url=top.chunk.url if top else None,
             citable=outcome in (AnswerabilityOutcome.ANSWERABLE, AnswerabilityOutcome.PARTIAL),
+            top_chunk_position_ratio=position_ratio,
         )
         matrix.append(entry)
         matrix_with_cross_page.append((entry, cross_page))

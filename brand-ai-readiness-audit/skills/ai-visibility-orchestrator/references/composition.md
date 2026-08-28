@@ -59,6 +59,16 @@ what actually survived the stage before it. Breaking this (e.g. letting
 collapse this distinction and turn the marketplace back into a flat
 checklist.
 
+`arrival-engagement-audit` (stage ⑥) extends the same pattern one stage
+further: it audits the `citable=True` pages from stage ④'s own
+answerability_matrix -- the literal set of pages that actually won a
+buyer-intent query -- not a re-derived guess at "pages likely to be
+cited." A page a search-engine crawler would treat as important but
+that never surfaced an answer to any simulated query is invisible to
+this stage, which is correct: it isn't a page an AI-referred visitor
+would actually land on. (See
+`ai-visibility-orchestrator/scripts/run_audit.py::run_arrive_stage`.)
+
 ## Pipeline order and current status
 
 ```
@@ -67,7 +77,7 @@ checklist.
 ③ extractability-audit     (implemented: 4 detectors)
 ④ retrieval-simulation     (implemented: chunking, BM25, answerability matrix, orphan-fact/cross-page-join/boilerplate)
 ⑤ trust-corroboration-audit (implemented: entity anchoring, staleness, description drift, attribution density)
-⑥ arrival-engagement-audit (not yet wired up)
+⑥ arrival-engagement-audit (implemented: answer proximity, orientation, context reset, entry interference, next-step, AI-referral instrumentation, scoped latency)
 ✗ finding-verification     (cross-cutting, runs after ①-⑥, not yet wired up)
 ```
 

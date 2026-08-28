@@ -85,6 +85,17 @@ def _extract_segments(main_html: str) -> list[tuple[str, str | None]]:
     return segments
 
 
+def page_content_length(main_html: str) -> int:
+    """Total length of a page's main content, in the same offset space
+    `Chunk.char_offset` is measured in (sum of each segment's text
+    length + 1 joining char) -- so `chunk.char_offset / page_content_length(...)`
+    is a meaningful 0..1 position ratio. Used by stage (6) ARRIVE to ask
+    "is the citable answer above the fold" without re-deriving chunk
+    positions from scratch."""
+    segments = _extract_segments(main_html)
+    return sum(len(text) + 1 for text, _ in segments)
+
+
 def chunk_page(
     main_html: str,
     url: str,
@@ -106,12 +117,25 @@ def chunk_page(
     if not segments:
         return []
 
-    words: list[tuple[str, str | None, int]] = []  # (word, heading, segment_start_offset)
+    # (word, heading, offset) -- offset is per-*word*, not per-segment.
+    # Storing the segment's own start offset for every word in it (the
+    # first implementation) is only correct for segments shorter than
+    # one chunk window; a single large block -- one long <p>, common on
+    # real "wall of text" pages -- spans multiple chunks, and every
+    # chunk after the first would report the *segment's* start offset
+    # instead of its own true position. Confirmed directly: a 7.5k-char
+    # single-paragraph fixture produced 3 chunks that all reported
+    # offset=0. Tracking the running offset per word (not reset until
+    # the next segment) fixes this while staying cheap -- exact
+    # byte-perfect offsets aren't the point, a monotonically correct
+    # position for the ratio stage (6) ARRIVE computes is.
+    words: list[tuple[str, str | None, int]] = []
     running_offset = 0
     for text, heading in segments:
         for w in text.split():
             words.append((w, heading, running_offset))
-        running_offset += len(text) + 1  # +1 for the joining space/newline
+            running_offset += len(w) + 1  # +1 for the joining space
+        running_offset += 1  # extra separator between segments (was a newline/space in the original join)
 
     step = max(1, target_tokens - overlap_tokens)
     chunks: list[Chunk] = []

@@ -7,7 +7,7 @@ searchable text at all.
 
 from __future__ import annotations
 
-from brand_audit.chunk import _extract_segments, chunk_page, count_tokens
+from brand_audit.chunk import _extract_segments, chunk_page, count_tokens, page_content_length
 from brand_audit.retrieval import BM25Retriever
 
 
@@ -92,3 +92,31 @@ def test_chunks_are_deterministic_across_repeated_calls():
 def test_count_tokens_is_positive_for_nonempty_text():
     assert count_tokens("hello world") > 0
     assert count_tokens("") == 0
+
+
+def test_char_offset_increases_across_chunks_within_one_large_segment():
+    # Regression test: char_offset was originally tracked per-*segment*,
+    # not per-word -- a single block of text spanning multiple chunks
+    # (one long <p>, not multiple short ones) produced chunks that ALL
+    # reported the segment's start offset, i.e. every chunk after the
+    # first claimed to be at the very beginning of the page. Confirmed
+    # directly while building stage (6) ARRIVE's answer-proximity check,
+    # which depends on offsets actually increasing to tell "near the
+    # top" from "buried deep" apart at all.
+    one_big_paragraph = " ".join(f"word{i}" for i in range(1000))
+    html = f"<html><body><h1>T</h1><p>{one_big_paragraph}</p></body></html>"
+    chunks = chunk_page(html, "https://example.com/", target_tokens=100, overlap_tokens=10)
+    assert len(chunks) >= 3
+    offsets = [c.char_offset for c in chunks]
+    assert offsets == sorted(offsets)
+    assert len(set(offsets)) == len(offsets)  # strictly increasing, not repeated
+
+
+def test_page_content_length_matches_offset_scale():
+    html = "<html><body><h1>T</h1><p>" + " ".join(f"word{i}" for i in range(200)) + "</p></body></html>"
+    chunks = chunk_page(html, "https://example.com/", target_tokens=50, overlap_tokens=5)
+    total = page_content_length(html)
+    # every chunk's offset must fall within the page's own total length
+    assert all(0 <= c.char_offset < total for c in chunks)
+    # and the last chunk should be positioned toward the end, not the start
+    assert chunks[-1].char_offset / total > 0.5

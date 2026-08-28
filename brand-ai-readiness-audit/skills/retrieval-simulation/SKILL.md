@@ -14,8 +14,12 @@ good content" -- an outcome-anchored, reproducible probe.
 
 ## Pipeline
 
-1. Derive the brand's entity + category from the site itself (JSON-LD
-   `Organization`, title, H1, nav).
+1. Derive the brand's entity + category from the site itself: JSON-LD
+   `Organization` first, then the homepage's own `<title>`/`<h1>`, then
+   (Day 7) a domain-derived name as the last-resort floor -- not a
+   guess from some other sampled page's title, which a real Day 7 wild-
+   corpus check found could be hijacked by an unrelated page (see
+   Status).
 2. Expand a deterministic query set from a bundled template bank -- 6
    intent classes (identity, pricing, comparison, capability/spec,
    trust/proof, contact/logistics) x the detected vertical.
@@ -75,7 +79,15 @@ one or the other. `CHUNK-002`/`003`/`004` (Day 6) are also implemented
 and tested, `CHUNK-003` confirmed firing on real sites (stripe.com,
 notion.com) during the Day 6 wild-corpus sweep. Not implemented:
 "entity" as a fact type (regex-based NER would be too noisy -- see
-`render-gap-audit`'s equivalent note). See `docs/progress.md` for the
-full accounting, including a cluster of real bugs this stage's build
+`render-gap-audit`'s equivalent note). `detect_entity`'s fallback chain
+was tightened on Day 7: guessing a brand name from *some other* sampled
+page's title/h1 when the homepage itself wasn't in the crawl sample
+(the previous behavior) was found -- via the Day 7 wild-corpus sweep of
+`arrival-engagement-audit`, not this stage's own tests -- to be
+hijackable by an unrelated page (a real allbirds.com crawl sample never
+included its own homepage and instead named the site "Design System"
+after a legitimate but unrelated page's `<title>`); replaced with a
+domain-derived name as the floor. See `docs/progress.md` for the full
+accounting, including a cluster of real bugs this stage's build
 surfaced and fixed -- several in code that had already shipped on
 earlier days.
