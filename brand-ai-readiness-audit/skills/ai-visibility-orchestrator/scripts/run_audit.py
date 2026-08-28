@@ -2,9 +2,10 @@
 """Pipeline driver: crawl a site, run whatever stages are wired up, emit a
 schema-valid AuditReport.
 
-Day 3 milestone: stage (1) REACH (crawl-reach-audit) and stage (2)
-RENDER (render-gap-audit) detectors are wired up. Stages (3)-(6) don't
-exist yet, so their ai_readiness field reports "skipped", not "pass".
+Day 4 milestone: stage (1) REACH (crawl-reach-audit), stage (2) RENDER
+(render-gap-audit), and stage (3) EXTRACT (extractability-audit)
+detectors are wired up. Stages (4)-(6) don't exist yet, so their
+ai_readiness field reports "skipped", not "pass".
 
 Usage:
     python run_audit.py example.com
@@ -27,6 +28,8 @@ _REACH_SCRIPTS = Path(__file__).resolve().parents[2] / "crawl-reach-audit" / "sc
 sys.path.insert(0, str(_REACH_SCRIPTS))
 _RENDER_SCRIPTS = Path(__file__).resolve().parents[2] / "render-gap-audit" / "scripts"
 sys.path.insert(0, str(_RENDER_SCRIPTS))
+_EXTRACT_SCRIPTS = Path(__file__).resolve().parents[2] / "extractability-audit" / "scripts"
+sys.path.insert(0, str(_EXTRACT_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
@@ -171,6 +174,38 @@ async def run_render_stage(
     return stage_result, None
 
 
+def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResult:
+    """Structured-data/semantic-HTML checks over the stage (1) survivors.
+    Pure parsing, no network calls -- runs on the raw HTML from stage (1)
+    (not a rendered variant, even for pages stage (2) rendered): JSON-LD
+    is overwhelmingly server-rendered even on otherwise JS-heavy sites,
+    and a page RENDER already flagged as an empty shell simply has
+    nothing for these checks to find either way, which is harmless, not
+    a false negative -- RENDER already reported the more fundamental
+    problem for that page."""
+    import extract_detect
+
+    raw_by_url = {o.url: o.record.text for o in reach_outcomes if o.record is not None}
+    findings = []
+    checked = 0
+    for url in corpus_urls:
+        html = raw_by_url.get(url)
+        if html is None:
+            continue
+        checked += 1
+        findings += extract_detect.detect_schema_text_contradiction(url, html)
+        findings += extract_detect.detect_missing_required_properties(url, html)
+        findings += extract_detect.detect_heading_hierarchy_issues(url, html)
+        findings += extract_detect.detect_facts_in_images(url, html)
+
+    return StageResult(
+        stage=Stage.EXTRACT,
+        findings=findings,
+        corpus_delta=list(corpus_urls),
+        metrics={"pages_checked": checked},
+    )
+
+
 async def main_async(args: argparse.Namespace) -> int:
     site = normalize_site(args.site)
     domain = urlparse(site).netloc
@@ -225,6 +260,17 @@ async def main_async(args: argparse.Namespace) -> int:
             pages_rendered = render_result.metrics.get("pages_rendered", 0)
         if degradation:
             degradations.append(degradation)
+
+    # EXTRACT is pure parsing over already-fetched HTML -- no network
+    # wait, so no asyncio.wait_for needed -- but still budget-gated for
+    # consistency with "never run past the cap" on a pathologically large
+    # corpus, and so a timed-out run doesn't silently claim EXTRACT ran
+    # when the budget was actually already gone.
+    if budget.over_budget():
+        degradations.append("extract_stage_skipped_low_budget")
+    else:
+        extract_result = run_extract_stage(reach_result.corpus_delta, reach_outcomes)
+        stage_results.append(extract_result)
 
     duration_s = time.monotonic() - start
 

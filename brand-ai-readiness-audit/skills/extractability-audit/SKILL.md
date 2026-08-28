@@ -14,26 +14,50 @@ an extractor can pull out cleanly.
 
 ## Detects
 
-- `JSON-LD` / microdata / RDFa parsing (`extruct`) and validation
-  against a bundled schema.org subset.
-- Schema-vs-visible-text contradiction (JSON-LD says `price: 199`, the
-  page says `$249` -- a high-value, rarely-checked finding).
-- Semantic HTML integrity: heading hierarchy, table/`<dl>` structure.
-- Facts locked in images: numeric-looking content only present in
-  `alt`-less `<img>`/`<canvas>`/embedded PDFs.
+- **`EXTRACT-001`** Schema-vs-visible-text contradiction: JSON-LD claims
+  one price, the page's visible text shows another. Both sides are
+  normalized to a comparable float before comparing -- `"199"` vs.
+  `"$199.00"` is the same fact differently formatted, not a
+  contradiction.
+- **`EXTRACT-002`** Structured data missing properties its own declared
+  `@type` requires, checked against a bundled offline schema.org subset
+  (`assets/schema-subset.json`).
+- **`EXTRACT-003`** Heading hierarchy integrity: zero/multiple `<h1>`,
+  or a heading-level skip.
+- **`EXTRACT-004`** Numeric-looking facts locked in `alt`-less images,
+  narrowly scoped to filenames suggesting fact-bearing content (price
+  charts, spec tables) -- not every alt-less image, which would just be
+  generic-checklist noise (most alt-less images are decorative).
 
-Field research already recorded a **positive control** worth reusing as
-a regression check once this stage exists: a Shopify product page whose
-complete `ProductGroup`/`Offer` JSON-LD (price, currency, availability,
-rating) is present in the raw non-JS HTML -- see the Controls section
-of `references/taxonomy.md` at the orchestrator.
+Not yet implemented: microdata/RDFa contradiction checks (JSON-LD only
+for now -- `extruct` parses all three, but the contradiction/
+required-property detectors only walk the `json-ld` result), table/`<dl>`
+structure checks, and canvas/PDF fact detection (image-filename heuristic
+only). See `docs/progress.md` for the honest accounting.
+
+Field research already recorded a **positive control** reused as this
+stage's regression check: a Shopify product page whose complete
+`ProductGroup`/`Offer` JSON-LD (price, currency, availability, rating)
+is present in the raw non-JS HTML -- see the Controls section of
+`references/taxonomy.md` at the orchestrator, and
+`tests/fixtures/schema-clean-product/` for the synthetic version used in
+CI.
 
 ## Input / output contract
 
-Reads `corpus_delta` from `render-gap-audit` (or `crawl-reach-audit`
-directly if stage ② was skipped -- see `references/composition.md`).
-Writes a `StageResult` with `stage: extract`.
+Reads `corpus_delta` from `crawl-reach-audit` (the raw HTML of every
+stage-① survivor) directly, not gated through `render-gap-audit`'s
+`corpus_delta`: JSON-LD is overwhelmingly server-rendered even on
+otherwise JS-heavy sites, and a page `render-gap-audit` already flagged
+as an empty shell simply has nothing for these checks to find either
+way -- harmless, not a false negative, since `RENDER-001` already
+reported the more fundamental problem for that page. Writes a
+`StageResult` with `stage: extract`.
 
 ## Status
 
-Not yet implemented -- see `docs/progress.md` at the repo root.
+Implemented in `scripts/extract_detect.py`. All four detectors are
+unit-tested against synthetic HTML plus two end-to-end fixtures
+(`tests/fixtures/schema-contradiction`, `tests/fixtures/schema-clean-product`)
+that are the Day 4 DoD as an executable test: the contradiction detector
+flags the defect fixture and stays silent on the clean one.

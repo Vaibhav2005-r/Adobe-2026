@@ -1,0 +1,12 @@
+{
+  "_comment": "Minimal bundled schema.org subset -- offline, no network dependency, per the project's determinism constraint. Only the types + required properties this audit actually checks against (EXTRACT-002). Not a full schema.org mirror.",
+  "Organization": { "required": ["name"] },
+  "LocalBusiness": { "required": ["name", "address"] },
+  "Product": { "required": ["name"] },
+  "Offer": { "required": ["price", "priceCurrency"] },
+  "Article": { "required": ["headline"] },
+  "NewsArticle": { "required": ["headline"] },
+  "Person": { "required": ["name"] },
+  "FAQPage": { "required": ["mainEntity"] },
+  "BreadcrumbList": { "required": ["itemListElement"] }
+}
