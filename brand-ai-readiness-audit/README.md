@@ -61,6 +61,53 @@ and at least one machine-checkable artifact -- enforced at the Pydantic
 model level (`Finding.artifacts` requires ≥1 entry). No artifact, no
 finding.
 
+## How this differs from what already exists
+
+The AI-visibility market as of 2026 splits cleanly into two shapes, and
+this audit is deliberately neither:
+
+| | What it answers | Examples | What it can't tell you |
+|---|---|---|---|
+| **Monitoring platforms** | *Are* you being cited? | Profound, Peec AI (€89–199/mo), AthenaHQ ($295–499/mo), Scrunch AI, Otterly ($29/mo) | *Why not.* They poll live LLMs and track brand mentions — an outcome number, with no causal path back to a fix. Inherently non-reproducible: the same site polled twice gives different answers. |
+| **Checklist / radar audits** | Do you *pass these checks*? | Siftly's free AI-crawler audit (7 checks: HTTPS, robots.txt, headers, meta tags, sitemap, SSR, structured data), Igris Radar, AEO Engine, Screaming Frog with a spoofed GPTBot UA | *Whether any of it mattered.* A boolean "SSR: fail" or a 0–100 radar score is a generic assertion — the exact false-positive machine this project's build plan predicted and set out to avoid. |
+
+**This audit is the causal layer between them.** It doesn't report that
+you're uncited (monitoring) or that you failed check #4 (checklist) — it
+reports *which stage of the retrieval pipeline a specific buyer query
+died at, and the byte that killed it.*
+
+Being precise about what's actually novel here, since overclaiming is
+the failure mode this project's own discipline exists to prevent:
+
+- **Genuinely unserved.** Per-query **answerability outcomes**
+  (`ANSWERABLE`/`PARTIAL`/`UNGROUNDED`/`UNRETRIEVABLE`) computed against
+  *your own reachable corpus*, and a **falsification pass** that tries to
+  disprove each finding before shipping it. Searching the current
+  landscape surfaced no tool in either category that does either.
+- **A novel *application*, not a novel idea.** Chunk-boundary and
+  orphan-fact analysis. Chunking is thoroughly established in the
+  RAG-engineering literature — it is simply not applied by anyone as a
+  *website audit dimension*. The insight isn't "chunking matters," it's
+  "your public site is already someone else's RAG corpus, so audit it
+  like one."
+- **Known problem, better instrument.** That AI crawlers largely don't
+  execute JavaScript is industry-common knowledge, and Screaming Frog
+  can already spoof a GPTBot UA. Our differentiator is not the UA — it's
+  the **fact-level differential** between the two extractions
+  (currency/numeric/date/contact tokens present in the rendered DOM but
+  absent from the raw HTTP response), which turns a boolean into named,
+  attributable missing facts.
+- **Structurally different by construction.** Every commercial option
+  above is a hosted SaaS that queries live models. This runs offline,
+  needs no API key, and produces byte-identical reports across runs —
+  properties a polling-based architecture cannot have.
+
+Supporting the thesis from the outside: industry diagnostic data reports
+that brands with strong organic-search presence routinely score poorly
+on AI visibility *because their content is structured for keyword
+ranking rather than AI retrieval* — precisely the failure mode a
+checklist inherits and a pipeline simulation exposes.
+
 ## Composition: eight skills, one pipeline
 
 ```
@@ -208,7 +255,8 @@ including what was tried and reverted, in
 ## Structure
 
 ```
-marketplace.json              one entrypoint: ai-visibility-orchestrator
+marketplace.json              one entrypoint: ai-visibility-orchestrator (the brief's convention)
+.claude-plugin/marketplace.json  the same manifest at the path real Claude Code tooling looks for
 LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
@@ -221,3 +269,17 @@ docs/progress.md                the honest day-by-day accounting, including ever
 See `skills/ai-visibility-orchestrator/SKILL.md` for the full CLI and
 the composition contract in more detail; every skill's own `SKILL.md`
 documents its detectors, input/output contract, and current status.
+
+**A note on the manifest, stated openly.** The build plan this was
+written against specifies `marketplace.json` at the package root with a
+`metadata.entrypoint` key ("exactly one entrypoint"). The *published
+Claude Code plugin-marketplace spec* instead expects
+`.claude-plugin/marketplace.json`, and its `metadata` object is
+`additionalProperties: false` — so `entrypoint` there would be rejected
+by a strict validator. Since the original brief was never available to
+verify which convention the grader applies, this ships **both**: the
+root manifest exactly as the build plan specifies, and a strictly
+schema-conforming copy at the official path.
+`scripts/lint_marketplace.py` validates each against its own rules *and*
+enforces that they never drift apart (verified with a negative test —
+reintroducing `entrypoint` into the official copy fails the lint).
