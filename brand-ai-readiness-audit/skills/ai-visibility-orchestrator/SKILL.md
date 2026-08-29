@@ -54,7 +54,11 @@ before it ships -- re-fetch with a different UA, sample-adequacy check,
 a narrow contradiction search -- and demotes anything that fails to the
 report's `observations` array rather than dropping it silently.
 `assemble_report.dedup_findings` merges known same-root-cause pairs
-across stages afterward. A stage that never runs (budget exhausted, an
+across stages afterward, and `scripts/proactive.py` derives the
+beyond-defect `proactive_recommendations` array from measured
+answerability gaps and `llms.txt` absence -- recommendations, never
+findings, since they describe what is absent rather than what is
+broken. A stage that never runs (budget exhausted, an
 optional dependency missing) reports `ai_readiness: skipped`, not
 `pass`, so the report never implies a check that didn't happen. See
 `docs/progress.md` at the repo root for the day-by-day accounting.

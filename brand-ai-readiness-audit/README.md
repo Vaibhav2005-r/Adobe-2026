@@ -61,6 +61,31 @@ and at least one machine-checkable artifact -- enforced at the Pydantic
 model level (`Finding.artifacts` requires ≥1 entry). No artifact, no
 finding.
 
+## Beyond defects: the proactive layer
+
+A finding requires an artifact proving something is *wrong*. But the most
+valuable observation is often that something is **absent** — and absence
+has no artifact to point at, which is why these ship in their own
+`proactive_recommendations` array rather than as low-severity findings.
+
+The rule that keeps this from becoming a static best-practices list:
+**every recommendation is derived from something this run actually
+measured.** Three generators, each covering a distinct kind of absence:
+
+- **An entire buyer-intent class nothing answers.** Read from the
+  answerability matrix. Distinct from `CHUNK-001`, which measures the
+  corpus-wide unanswerable *ratio* — a site can sit comfortably under
+  that threshold and still answer nothing at all about, say, comparison,
+  which is exactly the gap a competitor's comparison page fills instead.
+- **Near-misses.** Queries that resolved only as `PARTIAL` — the facts
+  exist but must be assembled. These are the cheapest available wins:
+  the content is already written, it is merely badly co-located.
+- **No `/llms.txt`** — with a draft **generated from the site's own
+  sampled URLs**, not a stub. Raised as a recommendation rather than a
+  finding because `llms.txt` is a proposed convention, not a ratified
+  standard, and no major AI vendor has publicly committed to honouring
+  it. A site without one is not broken; it has skipped a cheap hedge.
+
 ## How this differs from what already exists
 
 The AI-visibility market as of 2026 splits cleanly into two shapes, and
@@ -198,6 +223,53 @@ AI-specific discrimination) and a crash (a `Finding` constructed with
 zero artifacts when an entire crawl came back empty). Full accounting,
 including what was tried and reverted, in
 [`docs/progress.md`](../docs/progress.md)'s Day 9 entry.
+
+## Relationship to prior research
+
+The academic literature on generative-engine visibility is ahead of this
+project in specific, nameable ways. Stating them plainly is more useful
+than being caught by them:
+
+- **The literature measures against real engines; this does not.**
+  [Citation-absorption work](https://arxiv.org/abs/2604.25707) analysed
+  21,143 real citations across 602 prompts on ChatGPT, Gemini and
+  Perplexity, separating *citation selection* (the engine picks you) from
+  *citation absorption* (your page actually contributes language and
+  evidence to the answer). Our rules are reasoned from mechanism and
+  validated against fixtures — never against a live generative engine.
+  **This is a deliberate constraint trade, not an oversight:** polling
+  live models would break determinism *and* require an API key, two of
+  this project's hard constraints. The cost is that our BM25 proxy's
+  divergence from real retrieval is unmeasured.
+- **Evaluation scale.** [E-GEO](https://arxiv.org/abs/2511.20867) builds
+  a 13,747-query testbed across five engines with adversarial
+  red-teaming. Ours is 8 fixtures and a 6-site sweep.
+- **Offline simulation is a named blind spot.** A
+  [position paper](https://arxiv.org/abs/2606.12439) identifies exactly
+  this gap — that offline laboratory settings diverge from deployed
+  system behaviour. It applies to us directly.
+- **Off-site may outweigh on-site.**
+  [Brand-notability benchmarking](https://arxiv.org/abs/2603.12282)
+  reports a systematic bias toward *earned media* over brand-owned
+  content. Our audit is almost entirely on-site (the off-site probe was
+  cut for determinism reasons), so on-site optimisation has a ceiling we
+  cannot measure. `TRUST-001` documents the same effect from field
+  research.
+- **Chunk quality has validated metrics.** Adaptive Chunking (LREC 2026)
+  defines References Completeness, Intrachunk Cohesion and others; our
+  orphan-fact detector is a hand-rolled cousin of the first.
+- **Standard IR vocabulary exists.** Recall@K, NDCG, MRR, and frameworks
+  like RAGAS and ARES. Our four-way outcome taxonomy deviates
+  deliberately — the build plan argues outcome-anchored classification
+  beats "intermediate proxies like Recall@k" for this audience — but the
+  deviation is a choice, not ignorance of the standard.
+
+**Where this project is genuinely unserved by prior work:** a targeted
+search found no academic work auditing a *website* for LLM
+retrievability with stage localisation (the "audit" literature concerns
+auditing LLMs themselves), and the RAG evaluation survey explicitly
+notes that corpus-level *retrievability assessment* is underexplored.
+The falsification pass has no equivalent in any paper or product found.
 
 ## Limitations, stated honestly
 

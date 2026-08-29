@@ -47,6 +47,7 @@ from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
     BudgetManager,
     discover_sitemap_urls,
+    fetch_llms_txt,
     fetch_robots,
     sample_seed_for,
     stratified_sample,
@@ -60,6 +61,7 @@ import httpx
 from assemble_report import assemble_report  # noqa: E402
 import detect as reach_detect  # noqa: E402
 import verify_findings  # noqa: E402
+from proactive import derive_proactive_recommendations  # noqa: E402
 from render_html import render_html_report  # noqa: E402
 from render_markdown import render_markdown_summary  # noqa: E402
 
@@ -81,6 +83,10 @@ async def run_reach_stage(
     async with httpx.AsyncClient(follow_redirects=True) as client:
         robots = await fetch_robots(client, base_url)
         sitemap_urls, sitemap_fetch_ok = await discover_sitemap_urls(client, base_url, robots)
+        # One extra cheap GET, robots-checked inside the helper. Its
+        # absence is a proactive recommendation, never a finding --
+        # llms.txt is a proposed convention, not a ratified standard.
+        llms_txt_present, llms_txt_status = await fetch_llms_txt(client, base_url, robots)
 
     domain = urlparse(base_url).netloc
     seed = sample_seed_for(domain)
@@ -131,6 +137,7 @@ async def run_reach_stage(
             "pages_excluded_by_robots": excluded_by_robots,
             "pages_fetched_ok": fetched_ok,
             "robots_fetched": robots.fetched,
+            "llms_txt_present": llms_txt_present,
         },
     )
     return stage_result, outcomes, seed
@@ -489,6 +496,18 @@ async def main_async(args: argparse.Namespace) -> int:
     elif all_findings:
         degradations.append("finding_verification_skipped_low_budget")
 
+    # The beyond-defect proactive layer. Runs last, on measured output
+    # only -- the answerability matrix stage (4) produced and the
+    # llms.txt presence stage (1) recorded. Cheap, deterministic, no
+    # network, so it isn't budget-gated: if the stages that feed it were
+    # skipped, it simply has nothing to derive from and returns [].
+    proactive = derive_proactive_recommendations(
+        answerability_matrix,
+        reach_result.corpus_delta,
+        site,
+        llms_txt_present=bool(reach_result.metrics.get("llms_txt_present")),
+    )
+
     duration_s = time.monotonic() - start
 
     report = assemble_report(
@@ -496,6 +515,7 @@ async def main_async(args: argparse.Namespace) -> int:
         stage_results=stage_results,
         findings=all_findings,
         observations=observations,
+        proactive_recommendations=proactive,
         duration_s=duration_s,
         sample_seed=sample_seed,
         pages_crawled=reach_result.metrics["pages_fetched_ok"],  # successfully fetched, not merely attempted

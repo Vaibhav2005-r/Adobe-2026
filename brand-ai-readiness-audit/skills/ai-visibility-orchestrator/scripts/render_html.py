@@ -202,6 +202,48 @@ def _observations_html(report: AuditReport) -> str:
 """.strip()
 
 
+def _proactive_html(report: AuditReport) -> str:
+    """The beyond-defect layer. Rendered as its own section, visually
+    distinct from findings, because these are *not* defects -- presenting
+    them alongside artifact-backed findings would blur exactly the
+    distinction the report exists to make."""
+    if not report.proactive_recommendations:
+        return ""
+    cards = []
+    for rec in report.proactive_recommendations:
+        action_html = ""
+        if rec.suggested_action:
+            a = rec.suggested_action
+            impl = "".join(f"<li>{_esc(s)}</li>" for s in a.implementation)
+            step = (
+                f'<div class="verification-step"><strong>Verify:</strong> <code>{_esc(a.verification_step)}</code></div>'
+                if a.verification_step else ""
+            )
+            action_html = (
+                f'<div class="suggested-action"><strong>Suggested action</strong> '
+                f"(impact: {_esc(a.impact)}, effort: {_esc(a.effort)})<p>{_esc(a.summary)}</p>"
+                f"{f'<ul>{impl}</ul>' if impl else ''}{step}</div>"
+            )
+        # rationale can carry a generated artifact (the llms.txt draft) --
+        # preserve its line breaks rather than collapsing it to a blob.
+        rationale = _esc(rec.rationale).replace("\n", "<br>")
+        cards.append(
+            f'<div class="finding proactive"><h3 class="finding-title">{_esc(rec.title)}</h3>'
+            f'<div class="finding-section"><p>{rationale}</p></div>{action_html}</div>'
+        )
+    return f"""
+<section class="stage-section">
+  <h2>Proactive recommendations &mdash; no defect found</h2>
+  <p class="observations-note">
+    Derived from what this run measured, not from a static best-practices list.
+    These are gaps rather than defects: nothing here is broken, so none of it
+    carries an artifact the way a finding does.
+  </p>
+  {''.join(cards)}
+</section>
+""".strip()
+
+
 def _answerability_matrix_html(report: AuditReport) -> str:
     if not report.answerability_matrix:
         return ""
@@ -324,6 +366,7 @@ h3.finding-title { font-size: 1.05rem; margin: 0.6rem 0; }
 .finding.severity-high { border-left-color: var(--high); }
 .finding.severity-medium { border-left-color: var(--medium); }
 .finding.severity-low { border-left-color: var(--low); }
+.finding.proactive { border-left-color: var(--pass); border-left-style: dashed; }
 .finding-header { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
 .badge {
   display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px;
@@ -395,6 +438,7 @@ def render_html_report(report: AuditReport) -> str:
   {_action_list_html(report)}
   {_findings_by_stage_html(report)}
   {_observations_html(report)}
+  {_proactive_html(report)}
   {_answerability_matrix_html(report)}
   {_manifest_html(report)}
 </div>

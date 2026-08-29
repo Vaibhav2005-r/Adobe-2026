@@ -155,9 +155,16 @@ def detect_empty_shell_pages(comparisons: list[RenderComparison]) -> Finding | N
         confidence=confidence,
         verification=_unverified(),
         impact_mechanism=(
-            "A crawler that doesn't execute JavaScript -- which major documented AI "
-            "crawlers are inconsistent about -- receives a page with nothing to extract, "
-            "index, or cite, regardless of how good the eventually-rendered content is."
+            "The major AI crawlers fetch raw HTML and do not execute JavaScript: Vercel's "
+            "crawler study found no evidence of JS execution across 500M+ GPTBot fetches, and "
+            "measured GPTBot downloading JS files in ~11.5% of requests and ClaudeBot in ~23.8% "
+            "without ever running them. Such a crawler receives a page with nothing to extract, "
+            "index, or cite, regardless of how good the eventually-rendered content is. Two "
+            "documented exceptions exist and are deliberately not claimed here: Applebot uses a "
+            "browser-based crawler that does render, and Gemini rides Googlebot's rendering "
+            "infrastructure -- so this finding is scoped to the fetch-only majority "
+            "(GPTBot, ClaudeBot, PerplexityBot, CCBot, Bytespider and the OpenAI/Anthropic "
+            "search and user agents), not to every AI crawler that exists."
         ),
         affected_queries=[],
         suggested_action=SuggestedAction(

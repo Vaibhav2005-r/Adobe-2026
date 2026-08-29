@@ -2,7 +2,7 @@
 
 **7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus**
 
-Audited 2026-08-29 00:45:03.983571+00:00 · 12 pages crawled, 0 rendered · 29.0s
+Audited 2026-08-29 09:26:25.740732+00:00 · 12 pages crawled, 0 rendered · 38.9s
 
 ## Funnel status
 
@@ -53,6 +53,13 @@ Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 sim
 - **[MEDIUM] https://www.allbirds.com/products/mens-wool-runners-true-black: a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 1/affected 1)
 - **[MEDIUM] https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 1/affected 1)
 - **[MEDIUM] 4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint** (`ENGAGE-004`, confidence: medium, checked 4/affected 4)
+
+## Proactive recommendations (no defect found)
+
+- **No page answers comparison-intent questions**
+- **No page answers contact-intent questions**
+- **No page answers trust-intent questions**
+- **6 queries are one edit away from being citable**
 
 
 **Degradations recorded this run:** `render_stage_skipped_by_flag`

@@ -1,6 +1,6 @@
 {
   "site": "allbirds.com",
-  "audited_at": "2026-08-29T00:45:03.983571Z",
+  "audited_at": "2026-08-29T09:26:25.740732Z",
   "schema_version": "1.0.0",
   "run_manifest": {
     "marketplace_version": "0.1.0",
@@ -8,7 +8,7 @@
     "pages_crawled": 12,
     "pages_rendered": 0,
     "sample_seed": "sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c",
-    "duration_s": 28.978815125010442,
+    "duration_s": 38.89694225002313,
     "stages_completed": [
       "reach",
       "extract",
@@ -638,7 +638,84 @@
     }
   ],
   "observations": [],
-  "proactive_recommendations": [],
+  "proactive_recommendations": [
+    {
+      "title": "No page answers comparison-intent questions",
+      "rationale": "All 3 simulated comparison-intent queries came back unanswerable from the AI-reachable corpus (outcomes: partial, ungrounded). No defect was detected on any individual page -- the gap is that no page exists that would compare the brand against alternatives in a form retrieval can surface. An assistant asked this will cite whoever does have such a page, which is usually a competitor or an aggregator.",
+      "suggested_action": {
+        "summary": "Publish a page that directly answers comparison-intent questions in the buyer's own phrasing.",
+        "priority": "low",
+        "impact": "medium",
+        "effort": "medium",
+        "confidence": "medium",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "Review the comparison queries in the answerability matrix -- they are the literal phrasings to answer",
+          "State each answer directly in text, not only in marketing narrative or an image",
+          "Keep the subject and the fact in the same section so they land in the same retrieval chunk"
+        ],
+        "verification_step": "Re-run the audit and confirm at least one query in this intent class becomes 'answerable'",
+        "rationale_ref": "references/taxonomy.md#chunk-001"
+      }
+    },
+    {
+      "title": "No page answers contact-intent questions",
+      "rationale": "All 3 simulated contact-intent queries came back unanswerable from the AI-reachable corpus (outcomes: partial, ungrounded). No defect was detected on any individual page -- the gap is that no page exists that would say how to get in touch or where the business is in a form retrieval can surface. An assistant asked this will cite whoever does have such a page, which is usually a competitor or an aggregator.",
+      "suggested_action": {
+        "summary": "Publish a page that directly answers contact-intent questions in the buyer's own phrasing.",
+        "priority": "low",
+        "impact": "medium",
+        "effort": "medium",
+        "confidence": "medium",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "Review the contact queries in the answerability matrix -- they are the literal phrasings to answer",
+          "State each answer directly in text, not only in marketing narrative or an image",
+          "Keep the subject and the fact in the same section so they land in the same retrieval chunk"
+        ],
+        "verification_step": "Re-run the audit and confirm at least one query in this intent class becomes 'answerable'",
+        "rationale_ref": "references/taxonomy.md#chunk-001"
+      }
+    },
+    {
+      "title": "No page answers trust-intent questions",
+      "rationale": "All 3 simulated trust-intent queries came back unanswerable from the AI-reachable corpus (outcomes: ungrounded). No defect was detected on any individual page -- the gap is that no page exists that would provide reviews, proof, or credibility signals in a form retrieval can surface. An assistant asked this will cite whoever does have such a page, which is usually a competitor or an aggregator.",
+      "suggested_action": {
+        "summary": "Publish a page that directly answers trust-intent questions in the buyer's own phrasing.",
+        "priority": "low",
+        "impact": "medium",
+        "effort": "medium",
+        "confidence": "medium",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "Review the trust queries in the answerability matrix -- they are the literal phrasings to answer",
+          "State each answer directly in text, not only in marketing narrative or an image",
+          "Keep the subject and the fact in the same section so they land in the same retrieval chunk"
+        ],
+        "verification_step": "Re-run the audit and confirm at least one query in this intent class becomes 'answerable'",
+        "rationale_ref": "references/taxonomy.md#chunk-001"
+      }
+    },
+    {
+      "title": "6 queries are one edit away from being citable",
+      "rationale": "These queries resolved as PARTIAL: the facts needed are present in the corpus, but only by assembling them across chunks rather than from one self-contained passage. Real retrieval pipelines do this assembly unreliably, so a PARTIAL is fragile rather than safe. Because the content already exists, these are the lowest-effort upgrades available -- no new page required. Affected: [pricing] \"What is the price of Allbirds's product?\"; [comparison] 'What makes Allbirds different from other product options?'; [comparison] 'Is Allbirds better than alternatives?'; [capability] 'What features does Allbirds offer?'; [capability] \"What are the specifications of Allbirds's product?\"",
+      "suggested_action": {
+        "summary": "Co-locate each partially-answered fact into a single self-contained passage.",
+        "priority": "low",
+        "impact": "medium",
+        "effort": "low",
+        "confidence": "medium",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "For each affected query, find where the facts currently live",
+          "Add one sentence or section that states the complete answer in one place",
+          "Name the subject explicitly in that passage -- do not rely on a heading several chunks earlier"
+        ],
+        "verification_step": "Re-run the audit and confirm these queries move from 'partial' to 'answerable'",
+        "rationale_ref": "references/taxonomy.md#chunk-003"
+      }
+    }
+  ],
   "answerability_matrix": [
     {
       "query": "What is Allbirds?",

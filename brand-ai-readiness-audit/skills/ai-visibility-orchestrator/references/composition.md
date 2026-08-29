@@ -104,6 +104,13 @@ the later stage's is the symptom.
 ✗ finding-verification      (implemented: re-fetch/reproduction, sample-adequacy, EXTRACT-002 contradiction search, demotion to observations)
 ```
 
+After assembly, `scripts/proactive.py` derives the beyond-defect layer
+from measured output only -- the answerability matrix stage (4) produced
+and the `llms.txt` presence stage (1) recorded. It emits
+`ProactiveRecommendation`s, never `Finding`s, because these describe
+what is *absent* and absence carries no artifact -- the "no artifact, no
+finding" rule would otherwise have to be bent to accommodate them.
+
 `ai-visibility-orchestrator/scripts/run_audit.py` owns the time budget
 (`src/brand_audit/crawl.py::BudgetManager`), the degradation policy, and
 final report assembly (`scripts/assemble_report.py`), which also emits
