@@ -1,0 +1,788 @@
+{
+  "site": "allbirds.com",
+  "audited_at": "2026-08-29T00:45:03.983571Z",
+  "schema_version": "1.0.0",
+  "run_manifest": {
+    "marketplace_version": "0.1.0",
+    "rule_pack_version": "2026.08.28",
+    "pages_crawled": 12,
+    "pages_rendered": 0,
+    "sample_seed": "sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c",
+    "duration_s": 28.978815125010442,
+    "stages_completed": [
+      "reach",
+      "extract",
+      "retrieve",
+      "cite",
+      "arrive"
+    ],
+    "degradations": [
+      "render_stage_skipped_by_flag"
+    ]
+  },
+  "summary": {
+    "total_findings": 12,
+    "critical": 0,
+    "high": 0,
+    "medium": 6,
+    "low": 6,
+    "ai_readiness": {
+      "reach": "pass",
+      "render": "skipped",
+      "extract": "partial",
+      "retrieve": "partial",
+      "cite": "pass",
+      "arrive": "partial"
+    },
+    "answerability": {
+      "answerable": 5,
+      "partial": 6,
+      "ungrounded": 7,
+      "unretrievable": 0
+    },
+    "headline": "7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus"
+  },
+  "findings": [
+    {
+      "id": "F-EXTRACT-001",
+      "title": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [\"heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')\"]",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-EXTRACT-002",
+      "title": "https://www.allbirds.com/products/mens-wool-runners-true-black: heading hierarchy issue(s) -- no <h1> found",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2]; issues: ['no <h1> found']",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/mens-wool-runners-true-black with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/mens-wool-runners-true-black | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-EXTRACT-003",
+      "title": "https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard: heading hierarchy issue(s) -- no <h1> found",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [3, 3, 3, 3, 3, 3, 3, 2, 2, 3, 2, 2, 3]; issues: ['no <h1> found']",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-EXTRACT-004",
+      "title": "https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red: heading hierarchy issue(s) -- no <h1> found",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2]; issues: ['no <h1> found']",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-EXTRACT-005",
+      "title": "https://www.allbirds.com/products/mens-strider-medium-grey: heading hierarchy issue(s) -- no <h1> found",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3]; issues: ['no <h1> found']",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/mens-strider-medium-grey",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/mens-strider-medium-grey with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/mens-strider-medium-grey | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-EXTRACT-006",
+      "title": "https://www.allbirds.com/products/womens-tree-dashers-rustic-brown: heading hierarchy issue(s) -- no <h1> found",
+      "severity": "low",
+      "stage": "extract",
+      "taxonomy_id": "EXTRACT-003",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": null
+      },
+      "evidence": "heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2]; issues: ['no <h1> found']",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/womens-tree-dashers-rustic-brown",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/womens-tree-dashers-rustic-brown with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Use exactly one <h1> per page and avoid heading-level skips.",
+        "priority": "low",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "high",
+        "stage_unblocked": "extract",
+        "implementation": [
+          "Restructure headings to a single h1 with no level skips"
+        ],
+        "verification_step": "curl -s https://www.allbirds.com/products/womens-tree-dashers-rustic-brown | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "rationale_ref": "references/taxonomy.md#extract-003"
+      }
+    },
+    {
+      "id": "F-CHUNK-001",
+      "title": "7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus",
+      "severity": "medium",
+      "stage": "retrieve",
+      "taxonomy_id": "CHUNK-001",
+      "scope": {
+        "checked": 18,
+        "affected": 7,
+        "page_class": null
+      },
+      "evidence": "[pricing] 'How much does Allbirds cost?' -> ungrounded; [comparison] 'How does Allbirds compare to competitors?' -> ungrounded; [trust] 'Is Allbirds a legitimate company?' -> ungrounded; [trust] 'What do customers say about Allbirds?' -> ungrounded; [trust] 'Are there reviews of Allbirds?' -> ungrounded; [contact] 'How do I contact Allbirds?' -> ungrounded; [contact] 'Where is Allbirds located?' -> ungrounded",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/design-system",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/fall-shoe-trends-2024",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/finding-the-best-womens-flats",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "high",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "Even where a page nominally contains this information somewhere on the site, it isn't retrievable the way an assistant's own retrieval pipeline would actually find it -- the query's own terms don't surface a chunk that grounds an answer. This is the direct, outcome-anchored metric that determines answer visibility, not an intermediate proxy.",
+      "affected_queries": [
+        "How much does Allbirds cost?",
+        "How does Allbirds compare to competitors?",
+        "Is Allbirds a legitimate company?",
+        "What do customers say about Allbirds?",
+        "Are there reviews of Allbirds?",
+        "How do I contact Allbirds?",
+        "Where is Allbirds located?"
+      ],
+      "suggested_action": {
+        "summary": "Add direct, front-loaded answers to buyer-intent questions in the site's own language, not just marketing narrative.",
+        "priority": "medium",
+        "impact": "high",
+        "effort": "medium",
+        "confidence": "high",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "Review the affected_queries list and add a page or section that states each answer directly",
+          "Use the buyer's own phrasing, not just internal terminology"
+        ],
+        "verification_step": "Re-run the audit after publishing the change and confirm the query's outcome improves",
+        "rationale_ref": "references/taxonomy.md#chunk-001"
+      }
+    },
+    {
+      "id": "F-CHUNK-002",
+      "title": "6 buyer-intent queries can only be answered by combining facts from different pages",
+      "severity": "medium",
+      "stage": "retrieve",
+      "taxonomy_id": "CHUNK-003",
+      "scope": {
+        "checked": 18,
+        "affected": 6,
+        "page_class": null
+      },
+      "evidence": "[pricing] \"What is the price of Allbirds's product?\"; [comparison] 'What makes Allbirds different from other product options?'; [comparison] 'Is Allbirds better than alternatives?'; [capability] 'What features does Allbirds offer?'; [capability] \"What are the specifications of Allbirds's product?\"",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/design-system",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/fall-shoe-trends-2024",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/finding-the-best-womens-flats",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "medium",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "The answer exists in the corpus but only by combining facts from two or more distinct pages -- e.g. one page's specification plus another page's price. Real retrieval pipelines rarely perform this cross-page join at query time, so a PARTIAL outcome here is more fragile than a same-page multi-chunk assembly.",
+      "affected_queries": [
+        "What is the price of Allbirds's product?",
+        "What makes Allbirds different from other product options?",
+        "Is Allbirds better than alternatives?",
+        "What features does Allbirds offer?",
+        "What are the specifications of Allbirds's product?",
+        "What is Allbirds's customer support?"
+      ],
+      "suggested_action": {
+        "summary": "Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages.",
+        "priority": "medium",
+        "impact": "medium",
+        "effort": "medium",
+        "confidence": "medium",
+        "stage_unblocked": "retrieve",
+        "implementation": [
+          "Summarize the combined fact (e.g. spec + price together) on at least one page"
+        ],
+        "verification_step": "Re-run the audit and confirm the query now resolves from a single page",
+        "rationale_ref": "references/taxonomy.md#chunk-003"
+      }
+    },
+    {
+      "id": "F-ENGAGE-001",
+      "title": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: a cold arrival can't tell what this is without the nav",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-002",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": "citable"
+      },
+      "evidence": "'Allbirds' appears on the page but not in its first 500 characters",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "low",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don't see the nav or logo as onboarding, because they don't browse to get here. If the page's own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant's citation landed somewhere legitimate.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Name the brand explicitly in the page's opening content, not just in the nav/logo.",
+        "priority": "medium",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "low",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Add a one-line brand-identifying sentence near the top of the main content"
+        ],
+        "verification_step": "Re-run the audit and confirm this page no longer appears in ENGAGE-002",
+        "rationale_ref": "references/taxonomy.md#engage-002"
+      }
+    },
+    {
+      "id": "F-ENGAGE-002",
+      "title": "https://www.allbirds.com/products/mens-wool-runners-true-black: a cold arrival can't tell what this is without the nav",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-002",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": "citable"
+      },
+      "evidence": "'Allbirds' appears on the page but not in its first 500 characters",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "low",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/mens-wool-runners-true-black with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don't see the nav or logo as onboarding, because they don't browse to get here. If the page's own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant's citation landed somewhere legitimate.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Name the brand explicitly in the page's opening content, not just in the nav/logo.",
+        "priority": "medium",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "low",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Add a one-line brand-identifying sentence near the top of the main content"
+        ],
+        "verification_step": "Re-run the audit and confirm this page no longer appears in ENGAGE-002",
+        "rationale_ref": "references/taxonomy.md#engage-002"
+      }
+    },
+    {
+      "id": "F-ENGAGE-003",
+      "title": "https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: a cold arrival can't tell what this is without the nav",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-002",
+      "scope": {
+        "checked": 1,
+        "affected": 1,
+        "page_class": "citable"
+      },
+      "evidence": "'Allbirds' appears on the page but not in its first 500 characters",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "low",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don't see the nav or logo as onboarding, because they don't browse to get here. If the page's own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant's citation landed somewhere legitimate.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Name the brand explicitly in the page's opening content, not just in the nav/logo.",
+        "priority": "medium",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "low",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Add a one-line brand-identifying sentence near the top of the main content"
+        ],
+        "verification_step": "Re-run the audit and confirm this page no longer appears in ENGAGE-002",
+        "rationale_ref": "references/taxonomy.md#engage-002"
+      }
+    },
+    {
+      "id": "F-ENGAGE-004",
+      "title": "4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-004",
+      "scope": {
+        "checked": 4,
+        "affected": 4,
+        "page_class": "citable"
+      },
+      "evidence": "https://www.allbirds.com/pages/design-system: 'onetrust' signature present; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: 'onetrust' signature present; https://www.allbirds.com/products/mens-wool-runners-true-black: 'onetrust' signature present; https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: 'onetrust' signature present",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/design-system",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "medium",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "An AI-referred visitor arrives already mid-task expecting to confirm a specific answer. A consent wall, age gate, or modal between them and the page's own content adds friction a search visitor (who browsed in cold) tolerates but an already-informed visitor doesn't -- and if it blocks first paint, it can hide the very answer the assistant cited.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Make consent/gate overlays non-blocking: render page content first, or default to a reasonable choice instead of gating first paint.",
+        "priority": "medium",
+        "impact": "medium",
+        "effort": "medium",
+        "confidence": "medium",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Defer the overlay's own script so it doesn't block content rendering",
+          "Default to the most restrictive consent choice rather than blocking until an explicit answer"
+        ],
+        "verification_step": "Re-run the audit and confirm the page no longer matches a known overlay signature",
+        "rationale_ref": "references/taxonomy.md#engage-004"
+      }
+    }
+  ],
+  "observations": [],
+  "proactive_recommendations": [],
+  "answerability_matrix": [
+    {
+      "query": "What is Allbirds?",
+      "intent": "identity",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What does Allbirds do?",
+      "intent": "identity",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "Tell me about Allbirds",
+      "intent": "identity",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "How much does Allbirds cost?",
+      "intent": "pricing",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What are Allbirds's prices?",
+      "intent": "pricing",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What is the price of Allbirds's product?",
+      "intent": "pricing",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "How does Allbirds compare to competitors?",
+      "intent": "comparison",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What makes Allbirds different from other product options?",
+      "intent": "comparison",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "Is Allbirds better than alternatives?",
+      "intent": "comparison",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What features does Allbirds offer?",
+      "intent": "capability",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What can Allbirds's product do?",
+      "intent": "capability",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What are the specifications of Allbirds's product?",
+      "intent": "capability",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "Is Allbirds a legitimate company?",
+      "intent": "trust",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/store-locator",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What do customers say about Allbirds?",
+      "intent": "trust",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "Are there reviews of Allbirds?",
+      "intent": "trust",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "How do I contact Allbirds?",
+      "intent": "contact",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "Where is Allbirds located?",
+      "intent": "contact",
+      "outcome": "ungrounded",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "citable": false,
+      "top_chunk_position_ratio": 0.0
+    },
+    {
+      "query": "What is Allbirds's customer support?",
+      "intent": "contact",
+      "outcome": "partial",
+      "top_chunk_url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+      "citable": true,
+      "top_chunk_position_ratio": 0.0
+    }
+  ]
+}
