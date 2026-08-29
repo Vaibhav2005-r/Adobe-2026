@@ -67,6 +67,34 @@ def test_ai_ua_block_no_sampled_urls_is_silent():
     assert findings == []
 
 
+def test_ai_ua_block_generic_wildcard_exclusion_of_one_page_is_silent():
+    # Real Day 9 false positive: a User-agent: * rule excluding one
+    # low-value page (a staff directory) blocks everyone equally --
+    # Googlebot, browsers, AI bots alike -- which is ordinary curation,
+    # not the "brand deliberately disallows named AI crawlers"
+    # mechanism this taxonomy entry is about. Must stay silent even
+    # though disallowed_ai_uas() technically returns all 12 bots for
+    # that one URL.
+    text = "User-agent: *\nDisallow: /staff-directory.html\nAllow: /"
+    robots = _robots(text)
+    findings = reach_detect.detect_ai_ua_block(
+        "https://example.com", robots, ["https://example.com/", "https://example.com/staff-directory.html"]
+    )
+    assert findings == []
+
+
+def test_ai_ua_block_named_bot_only_exclusion_of_one_page_still_fires():
+    # Contrast case for the fix above: this time the exclusion is
+    # genuinely AI-specific (no User-agent: * rule at all -- a generic
+    # crawler like Googlebot is unaffected), so it must still fire even
+    # though only one page is affected.
+    rules = "\n".join(f"User-agent: {ua}\nDisallow: /pricing" for ua in AI_USER_AGENTS)
+    robots = _robots(rules)
+    findings = reach_detect.detect_ai_ua_block("https://example.com", robots, _SAMPLE)
+    assert len(findings) == 1
+    assert findings[0].scope.affected == 1
+
+
 def _outcome(url: str, status: int, body: bytes = b"", headers: dict | None = None) -> FetchOutcome:
     return FetchOutcome(url=url, record=FetchRecord(
         url=url, http_status=status, body=body, fetched_with_ua="test", headers=headers or {}

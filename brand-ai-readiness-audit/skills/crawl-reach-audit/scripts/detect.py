@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from selectolax.parser import HTMLParser  # noqa: E402
 
-from brand_audit.crawl import AI_USER_AGENTS, RobotsPolicy  # noqa: E402
+from brand_audit.crawl import AI_USER_AGENTS, GENERIC_CRAWLER_UA, RobotsPolicy  # noqa: E402
 from brand_audit.fetch import FetchOutcome  # noqa: E402
 from brand_audit.models import (  # noqa: E402
     Artifact,
@@ -62,6 +62,27 @@ def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_urls: list[str]) 
     if not robots.fetched or not sample_urls:
         return []
     per_url_blocked = {url: robots.disallowed_ai_uas(url) for url in sample_urls}
+
+    # A URL only counts here if the exclusion is actually AI-*specific*
+    # -- i.e. a generic, unnamed crawler (GENERIC_CRAWLER_UA) would
+    # still be let in. A blanket `User-agent: *` rule that excludes
+    # every crawler equally (a staff directory, an admin panel, a
+    # search-results page) blocks AI bots only as an incidental side
+    # effect of a completely ordinary access-control decision -- not
+    # the "brand deliberately disallows named AI crawlers" mechanism
+    # this taxonomy entry is about. Found live during the Day 9 eval
+    # harness: a single-page `User-agent: *` exclusion in a compliance
+    # fixture scored `medium` and titled "disallows 12 of 12 named AI
+    # crawlers" -- technically accurate about bot coverage, misleading
+    # about what actually happened (everyone was excluded from one
+    # page, not AI specifically). Filtering here, rather than adding a
+    # page-count floor, keeps the *actually* AI-targeted single-page
+    # case intact -- e.g. 12 named-bot-only `Disallow: /pricing` rules
+    # with no `User-agent: *` at all still fires, correctly (see
+    # tests/test_reach_detectors.py).
+    per_url_blocked = {
+        url: uas for url, uas in per_url_blocked.items() if uas and robots.allowed(url, GENERIC_CRAWLER_UA)
+    }
     blocked = sorted(set().union(*per_url_blocked.values())) if per_url_blocked else []
     if not blocked:
         return []
@@ -87,11 +108,12 @@ def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_urls: list[str]) 
     confidence = Confidence.HIGH  # directly parsed from robots.txt, unambiguous
     severity = compute_severity(Stage.REACH, blast, confidence)
 
-    scope_note = "every named AI crawler" if site_wide else f"{len(blocked)} of {len(AI_USER_AGENTS)} named AI crawlers"
+    bot_note = "every named AI crawler" if site_wide else f"{len(blocked)} of {len(AI_USER_AGENTS)} named AI crawlers"
+    page_note = "" if site_wide else f" on {pages_affected}/{len(sample_urls)} sampled pages"
     return [
         Finding(
             id=_next_id(),
-            title=f"robots.txt disallows {scope_note}",
+            title=f"robots.txt disallows {bot_note}{page_note}",
             severity=severity,
             stage=Stage.REACH,
             taxonomy_id="REACH-001",

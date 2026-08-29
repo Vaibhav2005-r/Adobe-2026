@@ -27,12 +27,12 @@ The rule pack. Every finding emitted by any stage skill must map to an entry her
 ### REACH-001 — Explicit AI-crawler block, site-wide
 - **Stage:** reach
 - **Mechanism:** `robots.txt` carries explicit `Disallow: /` rules for every major documented AI crawler by name (`GPTBot`, `ChatGPT-User`, `anthropic-ai`, `ClaudeBot`, `Google-Extended`, `PerplexityBot`, `CCBot`, `Bytespider`, `Applebot-Extended`). A robots-respecting AI crawler never fetches a single byte of the site, so the brand can only ever appear in an assistant's answer via third-party syndication or licensing — never a first-party citation.
-- **Detection method:** parse `robots.txt` with `protego`; for each named AI-UA in the documented bot list, check for a `Disallow: /` (or equivalent broad disallow) rule; flag if the named-AI-UA rule set is more restrictive than `User-agent: *`.
-- **Evidence artifact:** the raw `robots.txt` block per UA (URL + full matched rule text).
-- **Severity default:** critical (blocks stage ① site-wide — nothing downstream can work).
+- **Detection method:** parse `robots.txt` with `protego`; for every sampled URL, check each named AI-UA for a `Disallow` rule; a URL only counts if the exclusion is AI-*specific* — a generic, unnamed crawler (`GENERIC_CRAWLER_UA`, a real Googlebot string) must still be allowed there, or the rule is a blanket `User-agent: *` exclusion that would catch any crawler equally (a staff directory, an admin panel), not the "brand deliberately disallows named AI crawlers" mechanism this entry is about. Blast radius is two-dimensional (bot coverage × page coverage, ≥90% each for site-wide, per `severity-model.md`'s REACH-002 worked example on why a single high-value page can still warrant `high` even when not literally site-wide).
+- **Evidence artifact:** the raw `robots.txt` block per UA (URL + full matched rule text), plus the affected-page fraction stated in the finding's own title.
+- **Severity default:** critical (blocks stage ① site-wide — nothing downstream can work), `medium` when the pattern doesn't clear the site-wide threshold.
 - **Confidence:** high — directly observed in the fetched `robots.txt`, and independently corroborated by a live-assistant citation test returning zero first-party URLs.
 - **Fix pattern:** none within the audit's own scope (recommend-only, per the "no writes to the audited site" constraint) — surface the tradeoff explicitly: the brand is choosing licensing/opt-out over AI-assistant visibility, and should confirm that's intentional.
-- **Source:** nytimes.com; live query "is New York Times free to read or subscription required" → 0/9 returned links were nytimes.com; robots.txt confirmed `Disallow: /` for 9 named AI bots including GPTBot and ClaudeBot.
+- **Source:** nytimes.com; live query "is New York Times free to read or subscription required" → 0/9 returned links were nytimes.com; robots.txt confirmed `Disallow: /` for 9 named AI bots including GPTBot and ClaudeBot. The AI-specific-targeting check was added Day 9 after the automated detector false-positived on a compliance fixture's ordinary `User-agent: *` page exclusion — see `docs/progress.md`.
 
 ### REACH-002 — Geo/locale redirect returns an empty body at the canonical marketing URL
 - **Stage:** reach

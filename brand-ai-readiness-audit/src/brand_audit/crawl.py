@@ -46,6 +46,17 @@ DEFAULT_FETCH_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthrop
 # a browser-UA re-fetch wouldn't exercise at all.
 VERIFICATION_UA = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1; +https://openai.com/gptbot"
 
+# A real, well-known non-AI crawler UA -- used only by REACH-001 to test
+# whether a robots.txt exclusion is actually AI-*specific*, or just a
+# generic `User-agent: *` rule that would exclude any crawler equally
+# (a staff directory or admin panel blocked from everyone, AI bots
+# included only incidentally, isn't the "brand deliberately blocks AI
+# bots" mechanism this taxonomy entry is about). Googlebot specifically
+# because it's the crawler robots.txt authors are most likely to have
+# tested against, making it a realistic proxy for "a generic, non-AI
+# crawler."
+GENERIC_CRAWLER_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
 
 @dataclass
 class RobotsPolicy:
