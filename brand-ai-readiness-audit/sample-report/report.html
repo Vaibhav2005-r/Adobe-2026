@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI readiness audit -- allbirds.com</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a1a1a; --muted: #666666; --border: #dddddd;
+  --card-bg: #fafafa; --code-bg: #f0f0f0;
+  --critical: #b3261e; --high: #c05621; --medium: #9a7d0a; --low: #4a5568;
+  --pass: #1e7e34; --partial: #9a7d0a; --fail: #b3261e; --skipped: #888888;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --fg: #e8e8e8; --muted: #a0a0a0; --border: #333844;
+    --card-bg: #1c1f26; --code-bg: #23262e;
+    --critical: #ff6b60; --high: #ff9d5c; --medium: #f0cf5c; --low: #9fb0c3;
+    --pass: #6fcf7a; --partial: #f0cf5c; --fail: #ff6b60; --skipped: #999999;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5; margin: 0; padding: 2rem 1rem 4rem;
+}
+.report { max-width: 900px; margin: 0 auto; }
+h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+h2 { font-size: 1.2rem; margin-top: 2.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+h3.finding-title { font-size: 1.05rem; margin: 0.6rem 0; }
+.headline { font-size: 1.1rem; color: var(--muted); margin: 0.5rem 0 1.5rem; }
+.meta { color: var(--muted); font-size: 0.9rem; }
+.funnel { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem; margin: 1.5rem 0; }
+.funnel-box {
+  border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.9rem; text-align: center; min-width: 90px;
+  background: var(--card-bg);
+}
+.funnel-box-highlight { border-width: 3px; border-color: var(--fail); }
+.funnel-label { font-size: 0.8rem; font-weight: 600; }
+.funnel-status { font-size: 0.75rem; text-transform: uppercase; margin-top: 0.15rem; }
+.funnel-status-pass .funnel-status { color: var(--pass); }
+.funnel-status-partial .funnel-status { color: var(--partial); }
+.funnel-status-fail .funnel-status { color: var(--fail); }
+.funnel-status-skipped .funnel-status { color: var(--skipped); }
+.funnel-arrow { color: var(--muted); }
+.summary-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 1rem 0 2rem; }
+.stat { text-align: center; }
+.stat-value { font-size: 1.6rem; font-weight: 700; display: block; }
+.stat-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; }
+.stat-critical .stat-value { color: var(--critical); }
+.stat-high .stat-value { color: var(--high); }
+.stat-medium .stat-value { color: var(--medium); }
+.stat-low .stat-value { color: var(--low); }
+.finding {
+  border: 1px solid var(--border); border-left-width: 5px; border-radius: 6px; padding: 1rem 1.2rem;
+  margin: 1rem 0; background: var(--card-bg);
+}
+.finding.severity-critical { border-left-color: var(--critical); }
+.finding.severity-high { border-left-color: var(--high); }
+.finding.severity-medium { border-left-color: var(--medium); }
+.finding.severity-low { border-left-color: var(--low); }
+.finding-header { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+.badge {
+  display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px;
+  border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted);
+}
+.badge-severity-critical { color: var(--critical); border-color: var(--critical); }
+.badge-severity-high { color: var(--high); border-color: var(--high); }
+.badge-severity-medium { color: var(--medium); border-color: var(--medium); }
+.badge-severity-low { color: var(--low); border-color: var(--low); }
+.badge-reproduced-true { color: var(--pass); border-color: var(--pass); }
+.badge-reproduced-false { color: var(--fail); border-color: var(--fail); }
+.finding-section { margin: 0.6rem 0; }
+.finding-section p { margin: 0.2rem 0; }
+.artifact { border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem; margin: 0.4rem 0; font-size: 0.85rem; }
+.artifact-meta { color: var(--muted); margin-left: 0.5rem; }
+.artifact-selector { margin-top: 0.3rem; }
+code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; word-break: break-word; }
+pre {
+  background: var(--code-bg); padding: 0.6rem; border-radius: 4px; overflow-x: auto; font-size: 0.8rem;
+  white-space: pre-wrap; word-break: break-word;
+}
+.suggested-action { margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px dashed var(--border); }
+.verification-step { margin-top: 0.4rem; font-size: 0.9rem; }
+.observations-note { color: var(--muted); font-size: 0.9rem; }
+.table-scroll { overflow-x: auto; }
+table.matrix-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+table.matrix-table th, table.matrix-table td { border-bottom: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }
+tr.outcome-answerable td:nth-child(3) { color: var(--pass); }
+tr.outcome-partial td:nth-child(3) { color: var(--partial); }
+tr.outcome-ungrounded td:nth-child(3), tr.outcome-unretrievable td:nth-child(3) { color: var(--fail); }
+.action-list li { margin: 0.5rem 0; }
+.action-meta { color: var(--muted); font-size: 0.85rem; }
+.run-manifest { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+.empty-state { color: var(--muted); }
+a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="report">
+  <h1>AI Visibility Audit &mdash; allbirds.com</h1>
+  <p class="meta">Audited 2026-08-29T00:45:03.983571+00:00 &middot; schema 1.0.0</p>
+  <p class="headline">7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus</p>
+  <p class='meta'>First funnel stage the brand falls out at: <strong>③ EXTRACT</strong></p>
+  <div class="funnel"><div class="funnel-box funnel-status-pass"><div class="funnel-label">① REACH</div><div class="funnel-status">pass</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-skipped"><div class="funnel-label">② RENDER</div><div class="funnel-status">skipped</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial funnel-box-highlight"><div class="funnel-label">③ EXTRACT</div><div class="funnel-status">partial</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial"><div class="funnel-label">④ RETRIEVE</div><div class="funnel-status">partial</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-pass"><div class="funnel-label">⑤ CITE</div><div class="funnel-status">pass</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial"><div class="funnel-label">⑥ ARRIVE</div><div class="funnel-status">partial</div></div></div>
+  <div class="summary-stats">
+    <div class="stat stat-critical"><span class="stat-value">0</span><span class="stat-label">Critical</span></div>
+    <div class="stat stat-high"><span class="stat-value">0</span><span class="stat-label">High</span></div>
+    <div class="stat stat-medium"><span class="stat-value">6</span><span class="stat-label">Medium</span></div>
+    <div class="stat stat-low"><span class="stat-value">6</span><span class="stat-label">Low</span></div>
+    <div class="stat"><span class="stat-value">12</span><span class="stat-label">Total</span></div>
+  </div>
+  <section class="stage-section">
+  <h2>Prioritized action list</h2>
+  <ol class="action-list"><li><span class='badge badge-severity-medium'>medium</span> <strong>Add direct, front-loaded answers to buyer-intent questions in the site&#x27;s own language, not just marketing narrative.</strong> <span class='action-meta'>(unblocks retrieve, impact: high, effort: medium)</span></li><li><span class='badge badge-severity-medium'>medium</span> <strong>Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages.</strong> <span class='action-meta'>(unblocks retrieve, impact: medium, effort: medium)</span></li><li><span class='badge badge-severity-medium'>medium</span> <strong>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</strong> <span class='action-meta'>(unblocks arrive, impact: low, effort: low)</span></li><li><span class='badge badge-severity-medium'>medium</span> <strong>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</strong> <span class='action-meta'>(unblocks arrive, impact: low, effort: low)</span></li><li><span class='badge badge-severity-medium'>medium</span> <strong>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</strong> <span class='action-meta'>(unblocks arrive, impact: low, effort: low)</span></li><li><span class='badge badge-severity-medium'>medium</span> <strong>Make consent/gate overlays non-blocking: render page content first, or default to a reasonable choice instead of gating first paint.</strong> <span class='action-meta'>(unblocks arrive, impact: medium, effort: medium)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li><li><span class='badge badge-severity-low'>low</span> <strong>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</strong> <span class='action-meta'>(unblocks extract, impact: low, effort: low)</span></li></ol>
+</section>
+  <section class="stage-section"><h2>③ EXTRACT &mdash; 6 findings</h2><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [&quot;heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)&quot;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/mens-wool-runners-true-black: heading hierarchy issue(s) -- no &lt;h1&gt; found</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2]; issues: [&#x27;no &lt;h1&gt; found&#x27;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/mens-wool-runners-true-black | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard: heading hierarchy issue(s) -- no &lt;h1&gt; found</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [3, 3, 3, 3, 3, 3, 3, 2, 2, 3, 2, 2, 3]; issues: [&#x27;no &lt;h1&gt; found&#x27;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red: heading hierarchy issue(s) -- no &lt;h1&gt; found</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2]; issues: [&#x27;no &lt;h1&gt; found&#x27;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/mens-strider-medium-grey: heading hierarchy issue(s) -- no &lt;h1&gt; found</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3]; issues: [&#x27;no &lt;h1&gt; found&#x27;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/mens-strider-medium-grey" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-strider-medium-grey</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/mens-strider-medium-grey | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div><div class="finding severity-low">
+  <div class="finding-header">
+    <span class="badge badge-severity-low">low</span>
+    <span class="badge badge-taxonomy">EXTRACT-003</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/womens-tree-dashers-rustic-brown: heading hierarchy issue(s) -- no &lt;h1&gt; found</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2]; issues: [&#x27;no &lt;h1&gt; found&#x27;]</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/womens-tree-dashers-rustic-brown" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/womens-tree-dashers-rustic-brown</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
+    <ul><li>Restructure headings to a single h1 with no level skips</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>curl -s https://www.allbirds.com/products/womens-tree-dashers-rustic-brown | grep -oE &#x27;&lt;h[1-6]&#x27; -- should start with h1 and never skip a level</code></div>
+  </div>
+</div></section><section class="stage-section"><h2>④ RETRIEVE &mdash; 2 findings</h2><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">CHUNK-001</span>
+    <span class="badge badge-confidence">confidence: high</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>[pricing] &#x27;How much does Allbirds cost?&#x27; -&gt; ungrounded; [comparison] &#x27;How does Allbirds compare to competitors?&#x27; -&gt; ungrounded; [trust] &#x27;Is Allbirds a legitimate company?&#x27; -&gt; ungrounded; [trust] &#x27;What do customers say about Allbirds?&#x27; -&gt; ungrounded; [trust] &#x27;Are there reviews of Allbirds?&#x27; -&gt; ungrounded; [contact] &#x27;How do I contact Allbirds?&#x27; -&gt; ungrounded; [contact] &#x27;Where is Allbirds located?&#x27; -&gt; ungrounded</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Even where a page nominally contains this information somewhere on the site, it isn&#x27;t retrievable the way an assistant&#x27;s own retrieval pipeline would actually find it -- the query&#x27;s own terms don&#x27;t surface a chunk that grounds an answer. This is the direct, outcome-anchored metric that determines answer visibility, not an intermediate proxy.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 18, affected 7</p></div>
+  <div class="finding-section"><strong>Affected queries</strong><ul><li>How much does Allbirds cost?</li><li>How does Allbirds compare to competitors?</li><li>Is Allbirds a legitimate company?</li><li>What do customers say about Allbirds?</li><li>Are there reviews of Allbirds?</li><li>How do I contact Allbirds?</li><li>Where is Allbirds located?</li></ul></div>
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></div><div class="artifact"><a href="https://www.allbirds.com/pages/fall-shoe-trends-2024" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/fall-shoe-trends-2024</a></div><div class="artifact"><a href="https://www.allbirds.com/pages/finding-the-best-womens-flats" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/finding-the-best-womens-flats</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: high, effort: medium)
+    <p>Add direct, front-loaded answers to buyer-intent questions in the site&#x27;s own language, not just marketing narrative.</p>
+    <ul><li>Review the affected_queries list and add a page or section that states each answer directly</li><li>Use the buyer&#x27;s own phrasing, not just internal terminology</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit after publishing the change and confirm the query&#x27;s outcome improves</code></div>
+  </div>
+</div><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">CHUNK-003</span>
+    <span class="badge badge-confidence">confidence: medium</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">6 buyer-intent queries can only be answered by combining facts from different pages</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>[pricing] &quot;What is the price of Allbirds&#x27;s product?&quot;; [comparison] &#x27;What makes Allbirds different from other product options?&#x27;; [comparison] &#x27;Is Allbirds better than alternatives?&#x27;; [capability] &#x27;What features does Allbirds offer?&#x27;; [capability] &quot;What are the specifications of Allbirds&#x27;s product?&quot;</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>The answer exists in the corpus but only by combining facts from two or more distinct pages -- e.g. one page&#x27;s specification plus another page&#x27;s price. Real retrieval pipelines rarely perform this cross-page join at query time, so a PARTIAL outcome here is more fragile than a same-page multi-chunk assembly.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 18, affected 6</p></div>
+  <div class="finding-section"><strong>Affected queries</strong><ul><li>What is the price of Allbirds&#x27;s product?</li><li>What makes Allbirds different from other product options?</li><li>Is Allbirds better than alternatives?</li><li>What features does Allbirds offer?</li><li>What are the specifications of Allbirds&#x27;s product?</li><li>What is Allbirds&#x27;s customer support?</li></ul></div>
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></div><div class="artifact"><a href="https://www.allbirds.com/pages/fall-shoe-trends-2024" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/fall-shoe-trends-2024</a></div><div class="artifact"><a href="https://www.allbirds.com/pages/finding-the-best-womens-flats" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/finding-the-best-womens-flats</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: medium, effort: medium)
+    <p>Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages.</p>
+    <ul><li>Summarize the combined fact (e.g. spec + price together) on at least one page</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit and confirm the query now resolves from a single page</code></div>
+  </div>
+</div></section><section class="stage-section"><h2>⑥ ARRIVE &mdash; 4 findings</h2><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">ENGAGE-002</span>
+    <span class="badge badge-confidence">confidence: low</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: a cold arrival can&#x27;t tell what this is without the nav</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>&#x27;Allbirds&#x27; appears on the page but not in its first 500 characters</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don&#x27;t see the nav or logo as onboarding, because they don&#x27;t browse to get here. If the page&#x27;s own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant&#x27;s citation landed somewhere legitimate.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1, page class citable</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</p>
+    <ul><li>Add a one-line brand-identifying sentence near the top of the main content</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit and confirm this page no longer appears in ENGAGE-002</code></div>
+  </div>
+</div><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">ENGAGE-002</span>
+    <span class="badge badge-confidence">confidence: low</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/mens-wool-runners-true-black: a cold arrival can&#x27;t tell what this is without the nav</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>&#x27;Allbirds&#x27; appears on the page but not in its first 500 characters</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don&#x27;t see the nav or logo as onboarding, because they don&#x27;t browse to get here. If the page&#x27;s own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant&#x27;s citation landed somewhere legitimate.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1, page class citable</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</p>
+    <ul><li>Add a one-line brand-identifying sentence near the top of the main content</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit and confirm this page no longer appears in ENGAGE-002</code></div>
+  </div>
+</div><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">ENGAGE-002</span>
+    <span class="badge badge-confidence">confidence: low</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: a cold arrival can&#x27;t tell what this is without the nav</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>&#x27;Allbirds&#x27; appears on the page but not in its first 500 characters</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don&#x27;t see the nav or logo as onboarding, because they don&#x27;t browse to get here. If the page&#x27;s own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant&#x27;s citation landed somewhere legitimate.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1, page class citable</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: low, effort: low)
+    <p>Name the brand explicitly in the page&#x27;s opening content, not just in the nav/logo.</p>
+    <ul><li>Add a one-line brand-identifying sentence near the top of the main content</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit and confirm this page no longer appears in ENGAGE-002</code></div>
+  </div>
+</div><div class="finding severity-medium">
+  <div class="finding-header">
+    <span class="badge badge-severity-medium">medium</span>
+    <span class="badge badge-taxonomy">ENGAGE-004</span>
+    <span class="badge badge-confidence">confidence: medium</span>
+    <span class="badge badge-reproduced-true">
+      reproduced
+    </span>
+  </div>
+  <h3 class="finding-title">4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>https://www.allbirds.com/pages/design-system: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/mens-wool-runners-true-black: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: &#x27;onetrust&#x27; signature present</p></div>
+  <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>An AI-referred visitor arrives already mid-task expecting to confirm a specific answer. A consent wall, age gate, or modal between them and the page&#x27;s own content adds friction a search visitor (who browsed in cold) tolerates but an already-informed visitor doesn&#x27;t -- and if it blocks first paint, it can hide the very answer the assistant cited.</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 4, affected 4, page class citable</p></div>
+  
+  
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></div><div class="artifact"><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></div><div class="artifact"><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a></div></div>
+  <div class="suggested-action">
+    <strong>Suggested action</strong> (impact: medium, effort: medium)
+    <p>Make consent/gate overlays non-blocking: render page content first, or default to a reasonable choice instead of gating first paint.</p>
+    <ul><li>Defer the overlay&#x27;s own script so it doesn&#x27;t block content rendering</li><li>Default to the most restrictive consent choice rather than blocking until an explicit answer</li></ul>
+    <div class="verification-step"><strong>Verify the fix:</strong> <code>Re-run the audit and confirm the page no longer matches a known overlay signature</code></div>
+  </div>
+</div></section>
+  
+  <section class="stage-section">
+  <h2>Answerability matrix</h2>
+  <p>5 answerable &middot; 6 partial &middot; 7 ungrounded &middot; 0 unretrievable</p>
+  <div class="table-scroll">
+  <table class="matrix-table">
+    <thead><tr><th>Intent</th><th>Query</th><th>Outcome</th><th>Top chunk</th><th>Position</th></tr></thead>
+    <tbody><tr class='outcome-answerable'><td>identity</td><td>What is Allbirds?</td><td>answerable</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-answerable'><td>identity</td><td>What does Allbirds do?</td><td>answerable</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-answerable'><td>identity</td><td>Tell me about Allbirds</td><td>answerable</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>pricing</td><td>How much does Allbirds cost?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-answerable'><td>pricing</td><td>What are Allbirds&#x27;s prices?</td><td>answerable</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-partial'><td>pricing</td><td>What is the price of Allbirds&#x27;s product?</td><td>partial</td><td><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>comparison</td><td>How does Allbirds compare to competitors?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-partial'><td>comparison</td><td>What makes Allbirds different from other product options?</td><td>partial</td><td><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></td><td>0%</td></tr><tr class='outcome-partial'><td>comparison</td><td>Is Allbirds better than alternatives?</td><td>partial</td><td><a href="https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey</a></td><td>0%</td></tr><tr class='outcome-partial'><td>capability</td><td>What features does Allbirds offer?</td><td>partial</td><td><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></td><td>0%</td></tr><tr class='outcome-answerable'><td>capability</td><td>What can Allbirds&#x27;s product do?</td><td>answerable</td><td><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></td><td>0%</td></tr><tr class='outcome-partial'><td>capability</td><td>What are the specifications of Allbirds&#x27;s product?</td><td>partial</td><td><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>trust</td><td>Is Allbirds a legitimate company?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/store-locator" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/store-locator</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>trust</td><td>What do customers say about Allbirds?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>trust</td><td>Are there reviews of Allbirds?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>contact</td><td>How do I contact Allbirds?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-ungrounded'><td>contact</td><td>Where is Allbirds located?</td><td>ungrounded</td><td><a href="https://www.allbirds.com/pages/design-system" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/pages/design-system</a></td><td>0%</td></tr><tr class='outcome-partial'><td>contact</td><td>What is Allbirds&#x27;s customer support?</td><td>partial</td><td><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a></td><td>0%</td></tr></tbody>
+  </table>
+  </div>
+</section>
+  <footer class="run-manifest">
+  <h2>Run manifest</h2>
+  <p>
+    marketplace 0.1.0 &middot; rule pack 2026.08.28 &middot;
+    12 pages crawled, 0 rendered &middot;
+    29.0s &middot; seed sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c
+  </p>
+  <p>stages completed: reach, extract, retrieve, cite, arrive</p>
+  <details><summary>Degradations</summary><ul><li>render_stage_skipped_by_flag</li></ul></details>
+</footer>
+</div>
+</body>
+</html>
