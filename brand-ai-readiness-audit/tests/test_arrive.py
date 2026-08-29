@@ -186,6 +186,17 @@ def test_analytics_snippet_present_not_flagged():
     assert ad.detect_no_ai_referral_instrumentation({"https://example.com/a": with_ga, "https://example.com/b": plain}) is None
 
 
+def test_no_pages_at_all_does_not_crash():
+    # Real Day 9 crash: zalando.de returned zero successful REACH-stage
+    # fetches, so ARRIVE's all_pages was {} -- this detector had no
+    # guard for that (unlike every other ARRIVE detector) and
+    # unconditionally built a Finding with artifacts=[], which fails
+    # Finding's own min_length=1 constraint. There's no page left to
+    # cite as evidence, so the honest answer is "nothing to report,"
+    # not a fabricated artifact.
+    assert ad.detect_no_ai_referral_instrumentation({}) is None
+
+
 # --- ENGAGE-007: scoped response latency -------------------------------------
 
 
@@ -245,18 +256,24 @@ def test_arrival_clean_fixture_has_zero_arrive_findings(tmp_path):
     assert "arrive" in report["run_manifest"]["stages_completed"]
 
 
-def test_arrive_stage_is_byte_identical_across_two_runs(tmp_path):
+def test_arrive_stage_is_byte_identical_across_three_runs(tmp_path):
+    # Three runs, matching the Day 9 DoD's own literal wording -- this
+    # is the suite's most comprehensive determinism check (ARRIVE runs
+    # last, after every other stage plus finding-verification's own
+    # re-fetch), so it's the one upgraded from two to three rather than
+    # every determinism test in the suite.
     server = _serve("arrival-clean", 8131)
     try:
         report_a = run_audit("http://localhost:8131", tmp_path / "run_a")
         report_b = run_audit("http://localhost:8131", tmp_path / "run_b")
+        report_c = run_audit("http://localhost:8131", tmp_path / "run_c")
     finally:
         server.shutdown()
 
-    for r in (report_a, report_b):
+    for r in (report_a, report_b, report_c):
         r["audited_at"] = None
         r["run_manifest"]["duration_s"] = None
         # elapsed_s isn't part of the report itself (only feeds ENGAGE-007's
         # internal decision), so no further scrubbing needed for determinism.
 
-    assert report_a == report_b
+    assert report_a == report_b == report_c

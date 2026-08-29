@@ -117,11 +117,21 @@ def test_determinism_across_runs(fixture_server, tmp_path):
     # --skip-render: this test is about the crawl/report-assembly
     # determinism guarantee specifically, not render correctness (that's
     # tests/test_render_gap.py) -- keeping it fast and focused.
+    #
+    # Three runs, not two -- the Day 9 DoD's own literal wording
+    # ("three runs of the same site, byte-identical"), and a real
+    # discipline difference: two runs matching could still hide a
+    # source of nondeterminism that happens to agree twice in a row by
+    # chance (e.g. a dict-ordering issue that's stable within a single
+    # process but not guaranteed across separate ones) -- three
+    # independent subprocess runs is a meaningfully stronger claim than
+    # two, not just a formality.
     report_a = run_audit(fixture_server, tmp_path / "run_a", "--skip-render")
     report_b = run_audit(fixture_server, tmp_path / "run_b", "--skip-render")
+    report_c = run_audit(fixture_server, tmp_path / "run_c", "--skip-render")
 
-    for r in (report_a, report_b):
+    for r in (report_a, report_b, report_c):
         r["audited_at"] = None
         r["run_manifest"]["duration_s"] = None
 
-    assert report_a == report_b
+    assert report_a == report_b == report_c

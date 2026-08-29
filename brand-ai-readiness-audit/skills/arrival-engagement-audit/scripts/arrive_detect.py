@@ -376,6 +376,18 @@ def detect_no_ai_referral_instrumentation(pages: dict[str, str]) -> Finding | No
     HTML can confirm "no analytics at all" but not whether an existing
     setup specifically segments chatgpt.com/perplexity.ai/claude.ai
     referrals, so it only ever fires on the stronger, cruder gap."""
+    if not pages:
+        # No page left to cite as evidence -- Finding requires >=1
+        # artifact by construction ("no artifact, no finding"), and
+        # forcing one here would either crash (confirmed live:
+        # zalando.de returned zero REACH-stage fetches, so ARRIVE's
+        # `all_pages` was empty and this line raised a pydantic
+        # ValidationError -- see docs/progress.md Day 9) or fabricate
+        # an artifact that doesn't back the claim. Same guard
+        # retrieve_detect.run_retrieval_simulation already established
+        # for the identical empty-corpus case on Day 5; this detector
+        # predates ARRIVE existing, so it never inherited the pattern.
+        return None
     for url in sorted(pages):
         html_lower = pages[url].lower()
         if any(sig in html_lower for sig in _ANALYTICS_SIGNATURES):

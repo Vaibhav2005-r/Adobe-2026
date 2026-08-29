@@ -25,9 +25,14 @@ composition contract.
 
 ## Status
 
-Stage ① (REACH) crawl core only -- no detectors wired up yet, so every
-report currently has zero findings by construction. See
-`docs/progress.md` at the repo root for the honest day-by-day accounting.
+All six funnel stages (REACH through ARRIVE) detect; a cross-cutting
+falsification pass re-fetches and sample-checks every finding before it
+ships. Fixture-suite precision 1.00, recall 1.00, false-positive rate
+0.00 on clean controls (`python scripts/eval_fixtures.py`). One command
+writes `report.json` + `report.html` + `report.md`. The narrative this
+section is a placeholder for -- composition story, wild-sweep results,
+limitations -- is Day 10 work; see `docs/progress.md` at the repo root
+for the honest day-by-day accounting in the meantime.
 
 ## Structure
 
