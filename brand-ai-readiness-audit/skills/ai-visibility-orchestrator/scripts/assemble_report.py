@@ -173,6 +173,7 @@ def assemble_report(
     findings: list[Finding] | None = None,
     observations: list = None,
     answerability_matrix: list[AnswerabilityMatrixEntry] = None,
+    proactive_recommendations: list = None,
 ) -> AuditReport:
     """`findings`: the already-verified findings list from
     `finding-verification` (Day 8) -- pass explicitly once that stage
@@ -187,6 +188,7 @@ def assemble_report(
     findings = dedup_findings(findings if findings is not None else [f for r in stage_results for f in r.findings])
     observations = observations or []
     answerability_matrix = answerability_matrix or []
+    proactive_recommendations = proactive_recommendations or []
 
     severity_counts = {s: 0 for s in Severity}
     for f in findings:
@@ -247,6 +249,6 @@ def assemble_report(
         summary=summary,
         findings=findings,
         observations=observations,
-        proactive_recommendations=[],
+        proactive_recommendations=proactive_recommendations,
         answerability_matrix=answerability_matrix,
     )

@@ -15,6 +15,14 @@ silently omitted). `report.html` is the single-file demo surface --
 open it directly in a browser. `report.json` is the schema-valid
 contract. `report.md` is the short executive summary.
 
+It also exercises the **proactive layer**: four recommendations derived
+from measured gaps (three buyer-intent classes nothing answers, plus six
+queries that resolved only as PARTIAL and are one edit from citable).
+Notably there is *no* `llms.txt` recommendation -- allbirds.com actually
+serves one (`# Agent Instructions — Allbirds`), so the generator
+correctly stayed silent. That is the detection working in both
+directions, not a gap.
+
 12 findings across three stages on a real, well-known Shopify DTC
 site: six `EXTRACT-003` (heading-hierarchy gaps on product pages),
 `CHUNK-001` + `CHUNK-003` (buyer-intent queries that don't resolve

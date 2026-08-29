@@ -85,6 +85,17 @@ def _action_list(report: AuditReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _proactive_section(report: AuditReport) -> str:
+    """Titles only -- the full rationale (which can include a generated
+    llms.txt draft) lives in the JSON and HTML. This file is the
+    read-this-first surface, not a second copy of everything."""
+    if not report.proactive_recommendations:
+        return ""
+    lines = ["## Proactive recommendations (no defect found)\n"]
+    lines += [f"- **{_md_escape(r.title)}**" for r in report.proactive_recommendations]
+    return "\n".join(lines) + "\n"
+
+
 def render_markdown_summary(report: AuditReport) -> str:
     s = report.summary
     observations_note = (
@@ -121,6 +132,7 @@ Answerability: {s.answerability.answerable} answerable, {s.answerability.partial
 ## Findings by stage
 
 {_findings_section(report)}
+{_proactive_section(report)}
 {degradations_note}
 ---
 _Full evidence, artifacts, and implementation steps for every finding are in the accompanying JSON and HTML reports._

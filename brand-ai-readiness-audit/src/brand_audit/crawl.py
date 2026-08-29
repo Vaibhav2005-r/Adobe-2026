@@ -35,6 +35,22 @@ AI_USER_AGENTS = [
     "anthropic-ai",
 ]
 
+# Of the UAs above, the documented exceptions to "AI crawlers don't execute
+# JavaScript" -- kept explicit so RENDER-001's impact_mechanism can be
+# precise rather than sweeping (added Day 10 after checking the evidence:
+# an earlier version implied all 12 were JS-blind, which overclaims).
+#
+#   Applebot        -- Apple documents a browser-based crawler that renders.
+#   Google-Extended -- not a fetching crawler at all: it is a training-usage
+#                      control token. Gemini itself rides Googlebot's
+#                      rendering infrastructure.
+#
+# Everything else in AI_USER_AGENTS (GPTBot, ClaudeBot, PerplexityBot,
+# CCBot, Bytespider, the OpenAI/Anthropic search+user agents) is
+# measured as fetch-only. See Vercel's crawler study, cited in
+# render_detect.detect_empty_shell_pages.
+JS_RENDERING_OR_NON_FETCHING_UAS = frozenset({"Applebot", "Google-Extended"})
+
 DEFAULT_FETCH_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthropic.com/claude-bot)"
 
 # A second, distinct AI-crawler UA -- used only by finding-verification's
@@ -100,6 +116,33 @@ async def fetch_robots(client: httpx.AsyncClient, base_url: str) -> RobotsPolicy
         parser=parser,
         sitemap_urls=list(parser.sitemaps),
     )
+
+
+async def fetch_llms_txt(client: httpx.AsyncClient, base_url: str, robots: RobotsPolicy) -> tuple[bool, int | None]:
+    """Is there an `/llms.txt` at the root? Returns (present, status).
+
+    `llms.txt` is a proposed convention for a plain-text file telling AI
+    systems what a site is about and which pages matter -- effectively a
+    curated index, where `robots.txt` is a permission list. It is not a
+    ratified standard and no major AI vendor has publicly committed to
+    honouring it, which is exactly why its absence is reported as a
+    *proactive recommendation* rather than a defect finding: a site
+    without one is not broken, it has simply skipped a cheap, low-risk
+    hedge. See the proactive layer in
+    `ai-visibility-orchestrator/scripts/proactive.py`.
+
+    Robots-checked before fetching, like every other request this
+    pipeline makes -- `/llms.txt` is an ordinary URL, not a special case
+    the way `/robots.txt` is.
+    """
+    llms_url = urljoin(base_url, "/llms.txt")
+    if not robots.allowed(llms_url, DEFAULT_FETCH_UA):
+        return False, None
+    try:
+        resp = await client.get(llms_url, timeout=10.0)
+    except httpx.HTTPError:
+        return False, None
+    return resp.status_code < 400, resp.status_code
 
 
 async def discover_sitemap_urls(
