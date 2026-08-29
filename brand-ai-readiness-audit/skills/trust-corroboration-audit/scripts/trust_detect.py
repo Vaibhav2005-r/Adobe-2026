@@ -297,10 +297,12 @@ def _has_citation_signal(html: str) -> bool:
 
 def detect_low_attribution_density(pages: dict[str, str]) -> Finding | None:
     """Pages carrying statistical/numeric claims but zero citation
-    language anywhere -- per the KDD 2024 GEO study cited in the build
-    plan, attributed statistics measurably move AI-visibility metrics;
-    their complete absence across the sampled corpus is worth flagging
-    as a proactive gap, not a defect on any one page."""
+    language anywhere -- the KDD 2024 GEO study (Aggarwal et al.,
+    arXiv:2311.09735) tested citation-, quotation- and statistic-adding
+    among nine strategies across ~10k queries and reports visibility
+    gains of "up to 40%", with efficacy varying by domain; their
+    complete absence across the sampled corpus is worth flagging as a
+    proactive gap, not a defect on any one page."""
     from brand_audit.facts import extract_facts
 
     pages_with_stats = []
@@ -331,8 +333,9 @@ def detect_low_attribution_density(pages: dict[str, str]) -> Finding | None:
         confidence=confidence,
         verification=_unverified(),
         impact_mechanism=(
-            "Per the KDD 2024 GEO study, attributed statistics and source citations measurably move "
-            "AI-visibility metrics (~+20-40% relative). Numeric claims with no attribution language "
+            "The KDD 2024 GEO study (Aggarwal et al., arXiv:2311.09735) found that adding source "
+            "citations, quotations and statistics measurably improves visibility in generative-engine "
+            "responses -- up to 40% in its own evaluation, varying by domain. Numeric claims with no attribution language "
             "anywhere on the page read as self-asserted, which weakens their weight for a system "
             "trying to corroborate them."
         ),
