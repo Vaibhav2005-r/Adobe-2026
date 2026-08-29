@@ -69,19 +69,45 @@ this stage, which is correct: it isn't a page an AI-referred visitor
 would actually land on. (See
 `ai-visibility-orchestrator/scripts/run_audit.py::run_arrive_stage`.)
 
+## The falsification pass and dedup -- one more link in the same chain
+
+`finding-verification` (cross-cutting) runs once, after all six stages'
+detection is done, over the flat list of every finding any stage
+produced. It's the same composition pattern one level up: instead of
+gating *what a stage can see*, it gates *what a finding is allowed to
+claim* -- re-fetching each finding's own artifact URL to check it still
+resolves, checking whether the claimed severity is actually supported
+by how much of the corpus was sampled, and (narrowly, for `EXTRACT-002`)
+checking for a contradicting signal. Anything that fails ships as an
+`observation`, not a `finding` -- visible, never silently dropped.
+
+`assemble_report.dedup_findings` runs after that, inside
+`assemble_report.py` itself: an exact-duplicate safety net, plus a
+small, explicit table of known same-root-cause cross-stage pairs
+(currently just `REACH-002`/`ENGAGE-003` -- a redirect that loses a
+deep link's specificity is both a crawler-fetch problem and an arrival-
+experience problem, and should ship as one finding, not two pointing at
+two different fixes). The merge always keeps the *earlier* funnel-stage
+finding as primary, regardless of severity -- consistent with this
+whole document's thesis: the earlier stage's framing is the root cause,
+the later stage's is the symptom.
+
 ## Pipeline order and current status
 
 ```
-① crawl-reach-audit        (implemented: crawl core + 6 detectors)
-② render-gap-audit         (implemented: dual-fetch differential)
-③ extractability-audit     (implemented: 4 detectors)
-④ retrieval-simulation     (implemented: chunking, BM25, answerability matrix, orphan-fact/cross-page-join/boilerplate)
+① crawl-reach-audit         (implemented: crawl core + 6 detectors)
+② render-gap-audit          (implemented: dual-fetch differential)
+③ extractability-audit      (implemented: 4 detectors)
+④ retrieval-simulation      (implemented: chunking, BM25, answerability matrix, orphan-fact/cross-page-join/boilerplate)
 ⑤ trust-corroboration-audit (implemented: entity anchoring, staleness, description drift, attribution density)
-⑥ arrival-engagement-audit (implemented: answer proximity, orientation, context reset, entry interference, next-step, AI-referral instrumentation, scoped latency)
-✗ finding-verification     (cross-cutting, runs after ①-⑥, not yet wired up)
+⑥ arrival-engagement-audit  (implemented: answer proximity, orientation, context reset, entry interference, next-step, AI-referral instrumentation, scoped latency)
+✗ finding-verification      (implemented: re-fetch/reproduction, sample-adequacy, EXTRACT-002 contradiction search, demotion to observations)
 ```
 
 `ai-visibility-orchestrator/scripts/run_audit.py` owns the time budget
 (`src/brand_audit/crawl.py::BudgetManager`), the degradation policy, and
-final report assembly (`scripts/assemble_report.py`). See
-`docs/progress.md` at the repo root for what's implemented vs. planned.
+final report assembly (`scripts/assemble_report.py`), which also emits
+the single-file HTML report (`scripts/render_html.py`) and the Markdown
+executive summary (`scripts/render_markdown.py`) from the same
+validated `AuditReport`. See `docs/progress.md` at the repo root for
+what's implemented vs. planned.

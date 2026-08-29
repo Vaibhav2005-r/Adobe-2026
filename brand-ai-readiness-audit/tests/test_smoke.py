@@ -95,6 +95,24 @@ def test_clean_control_produces_zero_findings(fixture_server, tmp_path):
         assert "render_stage_skipped_no_playwright" in report["run_manifest"]["degradations"]
 
 
+def test_one_command_produces_json_html_and_markdown(fixture_server, tmp_path):
+    # Day 8 DoD, verbatim: "one command -> JSON + HTML + Markdown
+    # summary, schema-valid, under 5 minutes."
+    run_dir = tmp_path / "run"
+    run_audit(fixture_server, run_dir, "--skip-render")
+    json_path, html_path, md_path = run_dir / "report.json", run_dir / "report.html", run_dir / "report.md"
+    assert json_path.exists() and html_path.exists() and md_path.exists()
+
+    html_text = html_path.read_text(encoding="utf-8")
+    assert html_text.startswith("<!doctype html>")
+    assert "</html>" in html_text
+    assert fixture_server.split("://")[1] in html_text  # the site name actually appears
+
+    md_text = md_path.read_text(encoding="utf-8")
+    assert md_text.startswith("# AI Visibility Audit")
+    assert "Funnel status" in md_text
+
+
 def test_determinism_across_runs(fixture_server, tmp_path):
     # --skip-render: this test is about the crawl/report-assembly
     # determinism guarantee specifically, not render correctness (that's

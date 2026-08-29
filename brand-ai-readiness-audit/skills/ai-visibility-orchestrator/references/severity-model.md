@@ -44,9 +44,16 @@ was implemented in code -- they're the worked examples the eventual
 
 ## Status
 
-The decision table above is the spec. The `f()` implementation itself
-(wiring this into `finding-verification`/`assemble_report.py` so
-`Finding.severity` is computed rather than passed in) is Day 8 work --
-see `docs/progress.md` at the repo root. `Finding.severity` in
-`src/brand_audit/models.py` currently accepts any valid `Severity` value
-because no detector emits findings yet.
+Implemented since Day 3 as `src/brand_audit/severity.py::compute_severity`
+-- every detector across all six stages calls it rather than hand-
+assigning a `Severity`, confirmed by grep (no `severity=Severity\.` literal
+assignment anywhere outside that one function and its own tests). This
+doc was written before that implementation and originally said the `f()`
+itself was Day 8 work; corrected on Day 8 while adding the piece that
+*was* actually still missing: `finding-verification` (Day 8) re-derives
+and recomputes `severity` after a confidence change, via
+`verify_findings._infer_blast_radius` -- an inversion of this same
+decision table, documented in that function's own docstring, since
+`Finding` doesn't persist `blast_radius` directly. See
+`skills/finding-verification/scripts/verify_findings.py` and
+`docs/progress.md` at the repo root.

@@ -2,9 +2,14 @@
 """Pipeline driver: crawl a site, run whatever stages are wired up, emit a
 schema-valid AuditReport.
 
-Day 7 milestone: all six funnel stages, REACH through ARRIVE, are wired
-up. Only `finding-verification` (the cross-cutting falsification pass)
-and dedup/merge remain -- Day 8 work.
+Day 8 milestone: the full pipeline is feature-complete. All six funnel
+stages (REACH through ARRIVE) detect; `finding-verification` falsifies
+every finding before it ships (re-fetch, sample-adequacy, contradiction
+search, demotion to `observations`); `assemble_report.dedup_findings`
+merges known same-root-cause cross-stage pairs. `render_html.py` and
+`render_markdown.py` turn the same validated report into the HTML demo
+surface and a Markdown executive summary -- one command now produces
+JSON + HTML + Markdown, per the Day 8 DoD.
 
 Usage:
     python run_audit.py example.com
@@ -35,6 +40,8 @@ _TRUST_SCRIPTS = Path(__file__).resolve().parents[2] / "trust-corroboration-audi
 sys.path.insert(0, str(_TRUST_SCRIPTS))
 _ARRIVE_SCRIPTS = Path(__file__).resolve().parents[2] / "arrival-engagement-audit" / "scripts"
 sys.path.insert(0, str(_ARRIVE_SCRIPTS))
+_VERIFY_SCRIPTS = Path(__file__).resolve().parents[2] / "finding-verification" / "scripts"
+sys.path.insert(0, str(_VERIFY_SCRIPTS))
 
 from brand_audit.crawl import (  # noqa: E402
     DEFAULT_FETCH_UA,
@@ -52,6 +59,9 @@ import httpx
 
 from assemble_report import assemble_report  # noqa: E402
 import detect as reach_detect  # noqa: E402
+import verify_findings  # noqa: E402
+from render_html import render_html_report  # noqa: E402
+from render_markdown import render_markdown_summary  # noqa: E402
 
 
 def normalize_site(site: str) -> str:
@@ -131,33 +141,39 @@ MIN_RENDER_BUDGET_S = 30.0  # not worth paying Chromium startup cost for less th
 
 async def run_render_stage(
     corpus_urls: list[str], reach_outcomes: list, max_render_pages: int, budget: BudgetManager
-) -> tuple[StageResult | None, str | None]:
+) -> tuple[StageResult | None, str | None, frozenset[str]]:
     """Dual-fetch differential over the stage (1) survivors. Returns
-    (StageResult, None) on success, or (None, degradation_reason) if
-    playwright isn't installed, or budget is too tight to be worth
-    starting -- the caller must NOT run this stage's findings in either
-    case, per the "never guess" rule."""
+    (StageResult, None, empty_shell_urls) on success, or
+    (None, degradation_reason, frozenset()) if playwright isn't
+    installed, or budget is too tight to be worth starting -- the
+    caller must NOT run this stage's findings in either case, per the
+    "never guess" rule. `empty_shell_urls` is returned explicitly
+    (not re-derived by the caller from finding severity/taxonomy_id)
+    because a page's emptiness is a fact about that one page,
+    independent of whether the *aggregate* pattern across the render
+    sample happened to cross the site-wide threshold -- see
+    render_detect.detect_empty_shell_pages."""
     try:
         from playwright.async_api import async_playwright  # noqa: F401
     except ImportError:
-        return None, "render_stage_skipped_no_playwright"
+        return None, "render_stage_skipped_no_playwright", frozenset()
 
     if budget.remaining() < MIN_RENDER_BUDGET_S:
-        return None, "render_stage_skipped_low_budget"
+        return None, "render_stage_skipped_low_budget", frozenset()
 
     import render_detect
 
     raw_by_url = {o.url: o.record.text for o in reach_outcomes if o.record is not None}
     targets = [u for u in corpus_urls if u in raw_by_url][:max_render_pages]
     if not targets:
-        return StageResult(stage=Stage.RENDER, findings=[], corpus_delta=[], metrics={"pages_rendered": 0}), None
+        return StageResult(stage=Stage.RENDER, findings=[], corpus_delta=[], metrics={"pages_rendered": 0}), None, frozenset()
 
     rendered_html = await render_detect.render_fetch(targets)
 
     today_iso = datetime.now(timezone.utc).date().isoformat()
-    findings = []
     render_failed = 0
     compared: list[str] = []
+    comparisons: list = []
     for url in targets:
         rendered = rendered_html.get(url)
         if rendered is None:
@@ -168,8 +184,22 @@ async def run_render_stage(
             render_failed += 1
             continue
         compared.append(url)
-        comparison = render_detect.compare(url, raw_by_url[url], rendered, today_iso=today_iso)
-        findings += render_detect.detect_render_gap(comparison)
+        comparisons.append(render_detect.compare(url, raw_by_url[url], rendered, today_iso=today_iso))
+
+    # Primary empty-shell signal is computed once, across the whole
+    # render sample (not per-page) -- see detect_empty_shell_pages for
+    # why: whether it's site-wide or page-class depends on what
+    # fraction of the *sample* is empty, not any one page in isolation.
+    findings = []
+    empty_shell_finding = render_detect.detect_empty_shell_pages(comparisons)
+    empty_shell_urls: set[str] = set()
+    if empty_shell_finding is not None:
+        findings.append(empty_shell_finding)
+        empty_shell_urls = {c.url for c in comparisons if render_detect.is_empty_shell(c)}
+    for comparison in comparisons:
+        if comparison.url in empty_shell_urls:
+            continue  # already covered by the aggregate empty-shell finding above
+        findings += render_detect.detect_partial_render_gap(comparison)
 
     stage_result = StageResult(
         stage=Stage.RENDER,
@@ -177,7 +207,7 @@ async def run_render_stage(
         corpus_delta=compared,
         metrics={"pages_rendered": len(compared), "pages_render_failed": render_failed},
     )
-    return stage_result, None
+    return stage_result, None, frozenset(empty_shell_urls)
 
 
 def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResult:
@@ -213,7 +243,7 @@ def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResu
 
 
 def run_retrieve_stage(
-    reach_corpus_urls: list[str], reach_outcomes: list, render_result: StageResult | None, base_url: str
+    reach_corpus_urls: list[str], reach_outcomes: list, empty_shell_urls: frozenset[str], base_url: str
 ) -> tuple[StageResult, list, retrieve_detect.Entity]:
     """The answerability probe. Composition contract: consumes the
     stage (1) survivors, minus any page stage (2) proved is an empty
@@ -224,14 +254,16 @@ def run_retrieve_stage(
     checked isn't the same as being proven empty, and shrinking the
     corpus based on a performance-budget artifact rather than an actual
     gating failure would misrepresent the corpus size, not narrow it
-    correctly."""
-    import retrieve_detect
+    correctly.
 
-    empty_shell_urls = set()
-    if render_result is not None:
-        for f in render_result.findings:
-            if f.taxonomy_id == "RENDER-001" and f.severity == "critical":
-                empty_shell_urls.update(a.url for a in f.artifacts)
+    `empty_shell_urls` comes straight from `run_render_stage`'s own
+    return value, not re-derived here from `f.severity == "critical"`
+    -- since Day 8, RENDER-001's severity is CRITICAL only when the
+    empty-shell pattern spans >=90% of the render sample (site-wide)
+    and PAGE_CLASS/`high` otherwise (see render_detect.
+    detect_empty_shell_pages), so severity no longer doubles as a
+    reliable "is this URL empty" signal the way it used to."""
+    import retrieve_detect
 
     raw_by_url = {o.url: o.record.text for o in reach_outcomes if o.record is not None}
     pages = {
@@ -362,19 +394,24 @@ async def main_async(args: argparse.Namespace) -> int:
         )
         out_path = Path(args.out) if args.out else run_dir / "report.json"
         out_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
-        print(f"Degraded report written to {out_path}")
+        html_path = out_path.with_suffix(".html")
+        html_path.write_text(render_html_report(report), encoding="utf-8")
+        md_path = out_path.with_suffix(".md")
+        md_path.write_text(render_markdown_summary(report), encoding="utf-8")
+        print(f"Degraded reports written to {out_path}, {html_path}, {md_path}")
         return 0
 
     stage_results = [reach_result]
     degradations = list(budget.degradations)
     pages_rendered = 0
-    render_result: StageResult | None = None  # stays None if skipped -- run_retrieve_stage needs to know either way
+    render_result: StageResult | None = None  # stays None if skipped -- appended to stage_results only if it ran
+    empty_shell_urls: frozenset[str] = frozenset()
 
     if args.skip_render:
         degradations.append("render_stage_skipped_by_flag")
     else:
         try:
-            render_result, degradation = await asyncio.wait_for(
+            render_result, degradation, empty_shell_urls = await asyncio.wait_for(
                 run_render_stage(reach_result.corpus_delta, reach_outcomes, args.max_render_pages, budget),
                 timeout=budget.remaining(),
             )
@@ -405,7 +442,7 @@ async def main_async(args: argparse.Namespace) -> int:
         degradations.append("retrieve_stage_skipped_low_budget")
     else:
         retrieve_result, answerability_matrix, retrieve_entity = run_retrieve_stage(
-            reach_result.corpus_delta, reach_outcomes, render_result, site
+            reach_result.corpus_delta, reach_outcomes, empty_shell_urls, site
         )
         stage_results.append(retrieve_result)
 
@@ -430,11 +467,35 @@ async def main_async(args: argparse.Namespace) -> int:
         )
         stage_results.append(arrive_result)
 
+    # finding-verification: the falsification pass, cross-cutting across
+    # every stage's own findings. Runs last, after detection is done, so
+    # it has the full findings list to re-fetch and re-test against --
+    # budget-gated like every other stage, and if skipped, findings ship
+    # as-is (still carrying each detector's own `_unverified()` marker)
+    # rather than blocking the report on a check that ran out of time.
+    all_findings = [f for r in stage_results for f in r.findings]
+    observations: list = []
+    if all_findings and not budget.over_budget():
+        try:
+            verified, observations = await asyncio.wait_for(
+                verify_findings.run_finding_verification(
+                    all_findings, total_pages_available=reach_result.metrics["pages_fetched_ok"]
+                ),
+                timeout=budget.remaining()
+            )
+            all_findings = verified
+        except asyncio.TimeoutError:
+            degradations.append("finding_verification_timed_out_budget_exhausted")
+    elif all_findings:
+        degradations.append("finding_verification_skipped_low_budget")
+
     duration_s = time.monotonic() - start
 
     report = assemble_report(
         site=domain,
         stage_results=stage_results,
+        findings=all_findings,
+        observations=observations,
         duration_s=duration_s,
         sample_seed=sample_seed,
         pages_crawled=reach_result.metrics["pages_fetched_ok"],  # successfully fetched, not merely attempted
@@ -446,10 +507,19 @@ async def main_async(args: argparse.Namespace) -> int:
     out_path = Path(args.out) if args.out else run_dir / "report.json"
     out_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
 
+    # Day 8 DoD: one command -> JSON + HTML + Markdown summary. Both are
+    # rendered from the same validated `report` object already in hand
+    # -- pure string-building, no I/O or network, so there's no runtime-
+    # budget reason to make either one skippable.
+    html_path = out_path.with_suffix(".html")
+    html_path.write_text(render_html_report(report), encoding="utf-8")
+    md_path = out_path.with_suffix(".md")
+    md_path.write_text(render_markdown_summary(report), encoding="utf-8")
+
     print(f"Audited {domain}: {report.summary.total_findings} findings "
           f"({reach_result.metrics['pages_fetched_ok']}/{reach_result.metrics['pages_sampled']} "
           f"sampled pages reachable, {pages_rendered} rendered) in {duration_s:.1f}s")
-    print(f"Report written to {out_path}")
+    print(f"Reports written to {out_path}, {html_path}, {md_path}")
     return 0
 
 
