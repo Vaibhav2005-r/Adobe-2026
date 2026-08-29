@@ -74,6 +74,59 @@ def test_clean_control_fixture_stays_silent(tmp_path):
     assert report["summary"]["ai_readiness"]["render"] == "pass"
 
 
+def test_empty_shell_ratio_below_threshold_is_page_class_not_site_wide():
+    # Real Day 8 bug: every empty-shell page used to claim SITE_WIDE
+    # unconditionally, regardless of how many *other* rendered pages
+    # were fine -- 1 empty page out of 10 rendered is not "your whole
+    # site is JS-only."
+    import render_detect
+
+    comparisons = [
+        render_detect.RenderComparison(
+            url="https://example.com/empty", raw_text="", rendered_text="x" * 200,
+            raw_facts={"currency": set(), "date": set(), "contact": set()},
+            rendered_facts={"currency": set(), "date": set(), "contact": set()},
+        )
+    ] + [
+        render_detect.RenderComparison(
+            url=f"https://example.com/{i}", raw_text="substantial real content here " * 10, rendered_text="x" * 200,
+            raw_facts={"currency": set(), "date": set(), "contact": set()},
+            rendered_facts={"currency": set(), "date": set(), "contact": set()},
+        )
+        for i in range(9)
+    ]
+    finding = render_detect.detect_empty_shell_pages(comparisons)
+    assert finding is not None
+    assert finding.severity == "high"  # PAGE_CLASS, not CRITICAL
+    assert finding.scope.checked == 10
+    assert finding.scope.affected == 1
+
+
+def test_empty_shell_ratio_above_threshold_is_site_wide():
+    import render_detect
+
+    comparisons = [
+        render_detect.RenderComparison(
+            url=f"https://example.com/{i}", raw_text="", rendered_text="x" * 200,
+            raw_facts={"currency": set(), "date": set(), "contact": set()},
+            rendered_facts={"currency": set(), "date": set(), "contact": set()},
+        )
+        for i in range(10)
+    ]
+    finding = render_detect.detect_empty_shell_pages(comparisons)
+    assert finding is not None
+    assert finding.severity == "critical"
+    assert finding.scope.checked == 10
+    assert finding.scope.affected == 10
+    assert len(finding.artifacts) == 10  # every affected URL, not just a few examples -- RETRIEVE's gating depends on it
+
+
+def test_no_comparisons_returns_none():
+    import render_detect
+
+    assert render_detect.detect_empty_shell_pages([]) is None
+
+
 def test_render_failure_is_none_not_empty_string():
     # A render that fails/times out must be distinguishable from a page
     # that genuinely rendered to nothing -- conflating the two would make

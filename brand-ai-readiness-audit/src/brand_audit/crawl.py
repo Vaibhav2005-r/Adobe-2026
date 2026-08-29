@@ -37,6 +37,15 @@ AI_USER_AGENTS = [
 
 DEFAULT_FETCH_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthropic.com/claude-bot)"
 
+# A second, distinct AI-crawler UA -- used only by finding-verification's
+# re-fetch check ("re-fetch and re-test with a different UA... does it
+# reproduce?", per docs/build-plan.md Part 2 (4)). Deliberately a
+# *different* named bot from DEFAULT_FETCH_UA, not a generic browser
+# string: the point is to catch a UA-conditional response (a WAF or
+# origin server treating one AI crawler differently from another), which
+# a browser-UA re-fetch wouldn't exercise at all.
+VERIFICATION_UA = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1; +https://openai.com/gptbot"
+
 
 @dataclass
 class RobotsPolicy:

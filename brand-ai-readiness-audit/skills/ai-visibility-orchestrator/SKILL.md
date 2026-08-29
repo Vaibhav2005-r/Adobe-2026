@@ -35,18 +35,29 @@ finding.
 python scripts/run_audit.py <site> [--max-pages 40] [--out report.json]
 ```
 
-This crawls the site (robots-respecting, read-only), runs whichever
-stages are wired up, and writes a schema-valid `AuditReport` (see
-`assets/report_schema.json`). Runtime is hard-capped under 5 minutes by
-`BudgetManager` (`src/brand_audit/crawl.py`), which degrades gracefully
-under an ordered ladder and records every degradation in the report
-rather than failing silently.
+This crawls the site (robots-respecting, read-only), runs all six
+funnel-stage skills plus the cross-cutting falsification pass, and
+writes three files from the same validated `AuditReport` (see
+`assets/report_schema.json`): `report.json` (the schema-valid contract
+-- the source of truth), `report.html` (single-file, self-contained --
+funnel diagram with the failing stage highlighted, findings grouped by
+stage, the answerability matrix, a prioritized action list -- the demo
+surface), and `report.md` (a shorter executive summary a non-expert
+reads top to bottom in under a minute). Runtime is hard-capped under 5
+minutes by `BudgetManager` (`src/brand_audit/crawl.py`), which degrades
+gracefully under an ordered ladder and records every degradation in the
+report rather than failing silently.
 
-**Current stage coverage:** ① REACH only (crawl core: robots/AI-UA
-policy, sitemap discovery, deterministic sampling, fetch). Stages ②-⑥ are
-not wired up yet -- their `ai_readiness` field reports `skipped`, not
+**Stage coverage:** all six funnel stages (① REACH through ⑥ ARRIVE)
+detect; `finding-verification` (cross-cutting) falsifies every finding
+before it ships -- re-fetch with a different UA, sample-adequacy check,
+a narrow contradiction search -- and demotes anything that fails to the
+report's `observations` array rather than dropping it silently.
+`assemble_report.dedup_findings` merges known same-root-cause pairs
+across stages afterward. A stage that never runs (budget exhausted, an
+optional dependency missing) reports `ai_readiness: skipped`, not
 `pass`, so the report never implies a check that didn't happen. See
-`docs/progress.md` at the repo root for what's done and what's next.
+`docs/progress.md` at the repo root for the day-by-day accounting.
 
 ## Composition contract
 

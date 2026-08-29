@@ -84,66 +84,106 @@ def compare(url: str, raw_html: str, rendered_html: str, *, today_iso: str | Non
 EMPTY_SHELL_THRESHOLD_CHARS = 80
 SUBSTANTIAL_CONTENT_THRESHOLD_CHARS = 150
 
+# Matches REACH-001's own precedent (Day 3) for the same underlying
+# question -- "is this pattern really site-wide, or just some pages?"
+# -- reusing the numeric threshold rather than inventing a second one.
+_SITE_WIDE_EMPTY_SHELL_RATIO = 0.9
 
-def detect_render_gap(comparison: RenderComparison) -> list[Finding]:
+
+def is_empty_shell(comparison: RenderComparison) -> bool:
     raw_len = len(comparison.raw_text.strip())
     rendered_len = len(comparison.rendered_text.strip())
+    return raw_len < EMPTY_SHELL_THRESHOLD_CHARS and rendered_len >= SUBSTANTIAL_CONTENT_THRESHOLD_CHARS
 
+
+def detect_empty_shell_pages(comparisons: list[RenderComparison]) -> Finding | None:
+    """RENDER-001 primary signal: pages that ship a near-empty raw HTTP
+    response but substantial rendered content. One aggregate finding
+    covering every affected page (matching the CHUNK-001/TRUST-00x
+    convention for a corpus-wide pattern), not one per page.
+
+    Blast radius is only SITE_WIDE -- and severity therefore only
+    CRITICAL -- when the pattern spans >=90% of the *actual render
+    sample checked*, not merely "this one page is empty." A single
+    empty page out of a much larger unrendered corpus cannot support a
+    "your whole site is JS-only" claim; every page below the threshold
+    is scoped to PAGE_CLASS instead. This was a real bug through Day 7:
+    every empty-shell page unconditionally claimed SITE_WIDE with
+    `Scope(checked=1, ...)`, which `finding-verification`'s sample-
+    adequacy check (Day 8) then correctly started catching and
+    demoting -- fixed at the source rather than left for verification
+    to paper over every single time, since the miscalibration was real
+    independent of whether verification existed to catch it."""
+    if not comparisons:
+        return None
+    empty = [c for c in comparisons if is_empty_shell(c)]
+    if not empty:
+        return None
+
+    confidence = Confidence.HIGH
+    site_wide = (len(empty) / len(comparisons)) >= _SITE_WIDE_EMPTY_SHELL_RATIO
+    severity = compute_severity(Stage.RENDER, BlastRadius.SITE_WIDE if site_wide else BlastRadius.PAGE_CLASS, confidence)
+    example = empty[0]
+    title = (
+        f"All {len(comparisons)} rendered page(s) ship an empty content shell -- all text requires JavaScript"
+        if site_wide
+        else f"{len(empty)} of {len(comparisons)} rendered pages ship an empty content shell -- all text requires JavaScript"
+    )
+    return Finding(
+        id=_next_id(),
+        title=title,
+        severity=severity,
+        stage=Stage.RENDER,
+        taxonomy_id="RENDER-001",
+        scope=Scope(checked=len(comparisons), affected=len(empty)),
+        evidence=(
+            f"Raw HTTP fetch of {example.url}: {len(example.raw_text.strip())} chars of extracted text "
+            f"({example.raw_text.strip()[:100]!r}). Headless-rendered fetch: "
+            f"{len(example.rendered_text.strip())} chars ({example.rendered_text.strip()[:150]!r}). "
+            f"Reproduced on {len(empty)}/{len(comparisons)} sampled pages."
+        ),
+        # Every affected URL, not just a few examples (unlike most
+        # aggregate findings' artifacts elsewhere in this codebase):
+        # retrieval-simulation's own composition-contract gating
+        # (run_retrieve_stage) excludes exactly the URLs listed here
+        # from the AI-reachable corpus it indexes, so a truncated list
+        # would silently let some genuinely-empty pages back in.
+        artifacts=[
+            Artifact(url=c.url, html_only_extract=c.raw_text[:2000], rendered_extract=c.rendered_text[:2000])
+            for c in empty
+        ],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            "A crawler that doesn't execute JavaScript -- which major documented AI "
+            "crawlers are inconsistent about -- receives a page with nothing to extract, "
+            "index, or cite, regardless of how good the eventually-rendered content is."
+        ),
+        affected_queries=[],
+        suggested_action=SuggestedAction(
+            summary="Server-render or statically pre-render the primary content.",
+            priority=severity,
+            impact="high",
+            effort="high",
+            confidence=confidence,
+            stage_unblocked=Stage.RENDER,
+            implementation=[
+                "Add an SSR/SSG build step for the primary content surface",
+                "Or serve a prerendered snapshot to non-JS user agents",
+            ],
+            verification_step=f"curl -s -A GPTBot {example.url} | wc -c -- should return substantial content, not an empty shell",
+            rationale_ref="references/taxonomy.md#render-001",
+        ),
+    )
+
+
+def detect_partial_render_gap(comparison: RenderComparison) -> list[Finding]:
+    """RENDER-001 secondary signal: the raw page is substantial, but
+    specific fact categories are JS-only within it. Caller skips this
+    for any page already covered by `detect_empty_shell_pages` -- the
+    whole-page-empty case subsumes any per-fact diff, same as the
+    original single-function version did with its early `return`."""
     findings: list[Finding] = []
-
-    # --- Primary signal: total empty-shell pattern (RENDER-001 core case) ---
-    if raw_len < EMPTY_SHELL_THRESHOLD_CHARS and rendered_len >= SUBSTANTIAL_CONTENT_THRESHOLD_CHARS:
-        confidence = Confidence.HIGH
-        severity = compute_severity(Stage.RENDER, BlastRadius.SITE_WIDE, confidence)
-        findings.append(
-            Finding(
-                id=_next_id(),
-                title=f"{comparison.url} ships an empty content shell -- all text requires JavaScript",
-                severity=severity,
-                stage=Stage.RENDER,
-                taxonomy_id="RENDER-001",
-                scope=Scope(checked=1, affected=1),
-                evidence=(
-                    f"Raw HTTP fetch: {raw_len} chars of extracted text "
-                    f"({comparison.raw_text.strip()[:100]!r}). "
-                    f"Headless-rendered fetch: {rendered_len} chars "
-                    f"({comparison.rendered_text.strip()[:150]!r})."
-                ),
-                artifacts=[
-                    Artifact(
-                        url=comparison.url,
-                        html_only_extract=comparison.raw_text[:2000],
-                        rendered_extract=comparison.rendered_text[:2000],
-                    )
-                ],
-                confidence=confidence,
-                verification=_unverified(),
-                impact_mechanism=(
-                    "A crawler that doesn't execute JavaScript -- which major documented AI "
-                    "crawlers are inconsistent about -- receives a page with nothing to extract, "
-                    "index, or cite, regardless of how good the eventually-rendered content is."
-                ),
-                affected_queries=[],
-                suggested_action=SuggestedAction(
-                    summary="Server-render or statically pre-render the primary content.",
-                    priority=severity,
-                    impact="high",
-                    effort="high",
-                    confidence=confidence,
-                    stage_unblocked=Stage.RENDER,
-                    implementation=[
-                        "Add an SSR/SSG build step for the primary content surface",
-                        "Or serve a prerendered snapshot to non-JS user agents",
-                    ],
-                    verification_step=f"curl -s -A GPTBot {comparison.url} | wc -c -- should return substantial content, not an empty shell",
-                    rationale_ref="references/taxonomy.md#render-001",
-                ),
-            )
-        )
-        return findings  # the whole-page case subsumes any per-fact diff below
-
-    # --- Secondary signal: raw page is substantial, but specific facts
-    # are JS-only within an otherwise-rendered page ---
     for category in ("currency", "date", "contact"):
         missing = comparison.rendered_facts[category] - comparison.raw_facts[category]
         if not missing:
