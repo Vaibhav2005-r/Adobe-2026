@@ -135,3 +135,32 @@ def test_determinism_across_runs(fixture_server, tmp_path):
         r["run_manifest"]["duration_s"] = None
 
     assert report_a == report_b == report_c
+
+
+# --- scheme normalization ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        ("example.com", "https://example.com"),
+        ("example.com:8443", "https://example.com:8443"),
+        ("http://example.com", "http://example.com"),
+        ("https://example.com", "https://example.com"),
+        # Loopback defaults to http: `run_audit.py localhost:8000` is the
+        # obvious way to try the tool against your own dev server, and
+        # blanket-https failed it on an SSL error with nothing pointing at
+        # the missing scheme.
+        ("localhost:8000", "http://localhost:8000"),
+        ("localhost", "http://localhost"),
+        ("127.0.0.1:5173", "http://127.0.0.1:5173"),
+        ("0.0.0.0:3000", "http://0.0.0.0:3000"),
+        # ...but only genuine loopback. A real host that merely contains
+        # the word stays https.
+        ("my.localhost.example.com", "https://my.localhost.example.com"),
+    ],
+)
+def test_normalize_site_picks_the_scheme_the_user_meant(given, expected):
+    from run_audit import normalize_site
+
+    assert normalize_site(given) == expected

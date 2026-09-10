@@ -169,3 +169,67 @@ def test_trust_clean_fixture_has_zero_cite_findings(tmp_path):
     cite_findings = [f for f in report["findings"] if f["stage"] == "cite"]
     assert cite_findings == []
     assert report["summary"]["ai_readiness"]["cite"] == "pass"
+
+
+# --- TRUST-006: staleness is a corpus-wide measurement, not a first hit ------
+
+
+def _dated(iso: str) -> str:
+    return (
+        '<html><body><script type="application/ld+json">'
+        f'{{"@type": "Article", "dateModified": "{iso}"}}</script><p>x</p></body></html>'
+    )
+
+
+_REF = date(2026, 9, 10)
+
+
+def test_staleness_scope_counts_the_whole_corpus_not_just_the_first_stale_page():
+    # Returning from inside the page loop on the first stale date it saw
+    # produced Scope(checked=1, affected=1) no matter how much of the site
+    # was stale -- so a 40-page stale archive and one forgotten page were
+    # indistinguishable in the report, and the understated scope fed
+    # straight into sample-adequacy checks and the severity function.
+    pages = {f"https://example.com/{n}": _dated(iso) for n, iso in
+             [("a", "2019-01-01"), ("b", "2020-01-01"), ("c", "2026-08-01"), ("d", "2026-08-01")]}
+    finding = td.detect_staleness(pages, reference_date=_REF)
+    assert finding is not None
+    assert (finding.scope.checked, finding.scope.affected) == (4, 2)
+
+
+def test_staleness_reports_every_stale_page_as_one_finding():
+    pages = {f"https://example.com/{n}": _dated("2019-01-01") for n in "abcde"}
+    finding = td.detect_staleness(pages, reference_date=_REF)
+    assert finding is not None
+    assert finding.scope.affected == 5
+    assert len(finding.artifacts) >= 1  # "no artifact, no finding" still holds
+
+
+def test_a_majority_stale_corpus_outranks_a_single_stale_page():
+    # Severity is f(stage, blast_radius, confidence) and blast radius is
+    # what the evidence supports -- a mostly-stale site is a page-class
+    # problem, one stale page among many is a local one.
+    mostly = {f"https://example.com/{n}": _dated("2019-01-01") for n in "abc"}
+    mostly["https://example.com/d"] = _dated("2026-08-01")
+    one = {f"https://example.com/{n}": _dated("2026-08-01") for n in "bcd"}
+    one["https://example.com/a"] = _dated("2019-01-01")
+
+    worse = td.detect_staleness(mostly, reference_date=_REF)
+    milder = td.detect_staleness(one, reference_date=_REF)
+    assert worse is not None and milder is not None
+    assert worse.severity != milder.severity
+
+
+def test_evidence_leads_with_the_oldest_page_not_an_arbitrary_one():
+    pages = {
+        "https://example.com/recent-but-stale": _dated("2025-01-01"),
+        "https://example.com/ancient": _dated("2015-01-01"),
+    }
+    finding = td.detect_staleness(pages, reference_date=_REF)
+    assert finding is not None
+    assert finding.evidence.startswith("https://example.com/ancient")
+
+
+def test_malformed_json_ld_on_a_page_does_not_crash_the_staleness_scan():
+    pages = {"https://example.com/a": '<html><body><script type="application/ld+json">{broken</script></body></html>'}
+    assert td.detect_staleness(pages, reference_date=_REF) is None

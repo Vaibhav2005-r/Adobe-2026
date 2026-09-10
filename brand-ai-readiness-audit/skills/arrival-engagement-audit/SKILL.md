@@ -87,3 +87,15 @@ sites (not just fixtures) during the Day 7 wild-corpus sweep; see
 entity-detection bug (Day 5-era code, in `retrieval-simulation`, not
 this skill) that this stage's own findings surfaced and that was fixed
 the same day.
+
+`ENGAGE-005`'s CTA phrase list is English-only, so
+`run_arrival_engagement_audit` takes `english_lexicons_apply` and
+suppresses that one detector when the corpus declares a language the
+bundled lexicons don't cover -- on a German fixture it reported "no
+recognizable next step" for pages whose next step was a `Jetzt
+bestellen` link. The other six detectors read redirects, analytics
+snippets, response latency, consent-library signatures and the brand's
+own name, none of which are English-dependent, and keep running.
+`ENGAGE-003`'s locale-gate phrase list is English-only too but is left
+enabled: an unrecognized phrase there means no finding, never a wrong
+one.

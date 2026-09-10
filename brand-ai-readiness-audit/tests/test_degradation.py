@@ -165,3 +165,40 @@ def test_site_with_no_sitemap_still_gets_audited(tmp_path):
     # not just fetched and ignored -- confirms the fallback sample
     # propagates through the whole pipeline, not just the REACH stage.
     assert len(report["answerability_matrix"]) == 18
+
+
+# --- a non-English corpus: report "not measured", never "measured, failed" ---
+
+
+def test_non_english_site_does_not_get_audited_by_english_lexicons(tmp_path):
+    # The buyer-intent query bank, the BM25 stopword list and ENGAGE-005's
+    # CTA phrases are all English. Before this guard, a deliberately
+    # well-built German fixture -- brand named up top on every page, JSON-LD
+    # on two, prices stated in both schema and prose, three German CTAs --
+    # audited as 15/18 queries unanswerable, with a CHUNK-001 finding, an
+    # ENGAGE-005 finding, a false headline, and five "no page answers
+    # X-intent questions" recommendations. Every one was an artifact of
+    # asking English questions of a German site.
+    server = _serve("non-english", 8134)
+    try:
+        report = run_audit("http://localhost:8134", tmp_path / "run")
+    finally:
+        server.shutdown()
+
+    assert report["run_manifest"]["pages_crawled"] == 3, "the crawl itself is language-independent and must still work"
+
+    # The probe didn't run, so the stage must not claim a verdict either way.
+    assert report["summary"]["ai_readiness"]["retrieve"] == "skipped"
+    assert report["answerability_matrix"] == []
+    assert "english_only_lexicons_suppressed_corpus_language_de" in report["run_manifest"]["degradations"]
+
+    # ...and none of the language-dependent findings may ship.
+    taxonomy_ids = {f["taxonomy_id"] for f in report["findings"]}
+    assert "CHUNK-001" not in taxonomy_ids
+    assert "ENGAGE-005" not in taxonomy_ids
+    assert not any("intent questions" in r["title"] for r in report["proactive_recommendations"])
+
+    # Language-independent stages still do their job -- this is a
+    # suppression of specific instruments, not of the audit.
+    assert report["summary"]["ai_readiness"]["reach"] == "pass"
+    assert report["summary"]["ai_readiness"]["extract"] == "pass"

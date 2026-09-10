@@ -61,6 +61,24 @@ Writes a `StageResult` with `stage: retrieve`, a single aggregate
 one finding per query), and the full `answerability_matrix` passed
 through to the report's top level.
 
+## Language scope
+
+The query bank and the BM25 stopword list are English. When the caller
+reports that the corpus declares a language they don't cover, it passes
+`probe_enabled=False`: entity detection still runs (it reads a JSON-LD
+`name`, a `<title>` and an `<h1>`, none of which depend on the query
+bank, and stage 6 needs the entity name), and the probe stops there --
+no queries, no matrix, no findings. The orchestrator then reports this
+stage `skipped` and records a degradation naming the language.
+
+This is not defensive coding. A deliberately well-built German fixture
+(`tests/fixtures/non-english`) scored 15 of 18 queries unanswerable, with
+a pricing page whose own sentence reads `Der Bergquell A1
+Aktivkohlefilter kostet 149,00 EUR`. Only the three identity queries
+passed, and only because a brand name is the one token that survives
+translation. Same contract as a missing Playwright in stage 2: skip the
+measurement, suppress the findings, record the degradation, never guess.
+
 ## Status
 
 Implemented in `scripts/retrieve_detect.py`, with chunking (`Chunk`,

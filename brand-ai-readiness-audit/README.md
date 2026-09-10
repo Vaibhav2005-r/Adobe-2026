@@ -33,7 +33,7 @@ A real report, committed and ready to open: [`sample-report/`](sample-report/)
 (allbirds.com, `report.html` is the one to open in a browser).
 
 ```bash
-python -m pytest tests/ -v                    # 161 tests, no network needed
+python -m pytest tests/ -v                    # 227 tests, no network needed
 python scripts/eval_fixtures.py                # fixture confusion matrix
 ```
 
@@ -197,19 +197,31 @@ this report is produced by code you can read start to finish.
 ## Evaluation
 
 Published confusion matrix (`python scripts/eval_fixtures.py`), against
-8 fixtures (2 known-defect cases, 5 clean controls, 1 scored separately
+9 fixtures (2 known-defect cases, 6 clean controls, 1 scored separately
 -- see below):
 
 | Metric | Value |
 |---|---|
 | Precision | **1.00** (2/2 flagged findings were real) |
 | Recall (on the fixtures' own known-positive cases) | **1.00** (2/2) |
-| False-positive rate on clean controls | **0.00** (0/9 certified-clean-stage checks produced a finding) |
+| False-positive rate on clean controls | **0.00** (0/13 certified-clean-stage checks produced a finding) |
 
 `retrieval-answerable` is scored separately (per-query answerability
 outcome, not a finding/taxonomy_id): **11/12 (92%)** correct. The one
 miss is a known, accepted property of a lexical-only retriever, not a
 bug -- see Limitations.
+
+The sixth clean control is **non-English** (`tests/fixtures/non-english`,
+a German site built to be genuinely good: `lang="de"`, brand named up top
+on every page, JSON-LD, prices in both schema and prose, three German
+CTAs). It certifies the four stages where an English-only lexicon would
+show up as a false positive. It earns its place -- before the language
+guard described under Limitations, this fixture produced a `CHUNK-001`
+finding, an `ENGAGE-005` finding, a false headline claiming 15 of 18
+buyer-intent queries were unanswerable, and five false "no page answers
+X-intent questions" recommendations. Its pricing page says
+`Der Bergquell A1 Aktivkohlefilter kostet 149,00 EUR`; the probe called
+that UNGROUNDED.
 
 **Wild-corpus sweep**, run through the real, current pipeline (not just
 hand-diagnosed, as Day 1's original 12-site field research was): a
@@ -243,7 +255,7 @@ than being caught by them:
   divergence from real retrieval is unmeasured.
 - **Evaluation scale.** [E-GEO](https://arxiv.org/abs/2511.20867) builds
   a 13,747-query testbed across five engines with adversarial
-  red-teaming. Ours is 8 fixtures and a 6-site sweep.
+  red-teaming. Ours is 9 fixtures and a 6-site sweep.
 - **Offline simulation is a named blind spot.** A
   [position paper](https://arxiv.org/abs/2606.12439) identifies exactly
   this gap — that offline laboratory settings diverge from deployed
@@ -323,6 +335,61 @@ The falsification pass has no equivalent in any paper or product found.
   different synonym set didn't fix this, it just relocated the same
   miss to a different query on the same fixture -- a real, structural
   property of lexical matching, not a fixable bug.
+- **Non-English sites get five stages, not six.** The buyer-intent query
+  bank, the BM25 stopword list and `ENGAGE-005`'s CTA phrase list are
+  English-language instruments. Pointed at another language they don't
+  measure worse, they measure nothing while still producing
+  confident-looking output. So when the corpus *declares* a language they
+  don't cover (`<html lang>`, majority vote), the answerability probe
+  doesn't run, stage ④ reports `skipped`, `ENGAGE-005` is suppressed, and
+  the degradation names the language -- the same contract stage ② already
+  honours when Playwright is missing. REACH, RENDER, EXTRACT, CITE and
+  ARRIVE's other six detectors are language-independent and still run. An
+  *undeclared* language is treated as covered, deliberately: acting on an
+  absence would skip the crown-jewel stage on the many ordinary English
+  sites that never set the attribute. Real multilingual support means a
+  query bank, a stopword list and a CTA lexicon per language, plus a
+  fixture for each -- not a language-detection call.
+- **The stemmer is one rule (trailing `-s`), not a Porter stemmer.** So a
+  query token "price" doesn't match a page's "Pricing" heading. A real
+  Porter stemmer is deterministic, pure-Python and would collapse both to
+  "price", so this is fixable -- it wasn't fixed because there is no
+  evidence here that it *helps*: the answerability fixture is 12 data
+  points, the one current miss is semantic rather than morphological, and
+  this project's own rule is that a change to a detector needs measured
+  justification before it ships. Recorded as a known gap rather than
+  changed on faith.
+- **`ENGAGE-004` matches consent-library signatures in markup, not
+  blocking behaviour.** OneTrust/Cookiebot/CookieYes ship on a very large
+  share of EU-facing commercial sites, including ones whose banner is a
+  small non-blocking footer bar, so this check carries little information
+  on such a site. It's hedged where it can be -- medium confidence, and
+  the title says a consent overlay "can block" first paint rather than
+  that it does -- but confirming actual blocking needs a rendered page,
+  which this stage deliberately doesn't require.
+- **`ENGAGE-007` measures latency from the auditing machine.** A slow
+  local connection, a VPN or packet loss is attributed to the audited
+  site. `httpx`'s `Response.elapsed` is the cheap TTFB-adjacent proxy the
+  build plan's cut list explicitly chose over LCP/INP; it has no baseline
+  to subtract the client's own network from.
+- **No retry or backoff on 429/503.** Each URL is fetched exactly once, so
+  a site with aggressive burst limits can have pages recorded as
+  unreachable on a first 429. Deliberate to the extent that retries fight
+  both the politeness delay and the five-minute cap, but it is a real
+  source of under-measurement, not a principled choice.
+- **Fixture ports are hardcoded, and the fixtures themselves embed them.**
+  Every fixture's `robots.txt`, `sitemap.xml` and internal links carry
+  absolute `http://localhost:<port>` URLs, so the test suite fails with
+  `Address already in use` if something else holds one of ports
+  8123-8135. Moving to ephemeral ports means templating roughly twenty
+  fixture files at serve time -- a change to the published eval corpus
+  itself, which wasn't worth the regression risk for a local-collision
+  annoyance.
+- **CI runs on Linux only.** No `windows-latest` in the matrix, so
+  Windows-specific path and shell behaviour is untested. Two known
+  consequences are documented in `CLAUDE.md`: PowerShell's execution
+  policy blocks the `npx.ps1` shim used by `skills-ref` (use `npx.cmd` or
+  `cmd /c`), and the venv activate path differs.
 
 ## Structure
 
@@ -333,7 +400,7 @@ LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
 scripts/eval_fixtures.py        maintainer eval harness -- not a shipped skill
-tests/                          161 tests + local fixture sites (no live network needed)
+tests/                          227 tests + local fixture sites (no live network needed)
 docs/build-plan.md              the full 10-day plan this was built against
 docs/progress.md                the honest day-by-day accounting, including every bug found and fixed
 ```

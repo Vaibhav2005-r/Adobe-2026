@@ -41,7 +41,14 @@ def _next_id() -> str:
 
 
 def _unverified() -> Verification:
-    return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
+    # Detector-local placeholder. `finding-verification` overwrites this
+    # for every finding it processes; it survives into the report only
+    # when that stage is skipped for budget, which the report records as
+    # a degradation. Says "did not run", not "does not exist" -- the
+    # falsification pass has been wired into run_audit.py since Day 8,
+    # and the older wording told a reader of a degraded report that the
+    # feature was missing.
+    return Verification(reproduced=False, method="single-pass detection; falsification pass did not run")
 
 
 def _load_schema_subset() -> dict:
@@ -224,11 +231,22 @@ def detect_heading_hierarchy_issues(url: str, html: str) -> list[Finding]:
     elif h1_count > 1:
         issues.append(f"{h1_count} <h1> tags found (should be exactly 1)")
 
-    running_max = 0
+    # Compare each heading against the one immediately before it, not
+    # against the deepest level seen anywhere on the page.
+    #
+    # A running maximum never decreases, but a real document outline does:
+    # h1 > h2 > h3 > h2 > h3 is correct, well-formed HTML, and every
+    # sibling section legitimately resets the working depth. Carrying the
+    # maximum forward meant one deep heading early on raised the bar for
+    # the whole rest of the page -- after an h4 in section 1, a section 2
+    # that went h2 -> h5 passed the `level > running_max + 1` test (5 > 5
+    # is false) and the skip went unreported. Every later skip on a page
+    # with any deep heading was masked the same way.
+    prev_level = 0
     for level, text in ordered:
-        if running_max and level > running_max + 1:
-            issues.append(f"heading level skip: jumped to h{level} after h{running_max} (text: {text!r})")
-        running_max = max(running_max, level)
+        if prev_level and level > prev_level + 1:
+            issues.append(f"heading level skip: jumped to h{level} after h{prev_level} (text: {text!r})")
+        prev_level = level
 
     if not issues:
         return []

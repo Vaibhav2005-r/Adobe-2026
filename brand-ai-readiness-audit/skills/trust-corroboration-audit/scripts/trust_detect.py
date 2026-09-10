@@ -44,7 +44,14 @@ def _next_id() -> str:
 
 
 def _unverified() -> Verification:
-    return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
+    # Detector-local placeholder. `finding-verification` overwrites this
+    # for every finding it processes; it survives into the report only
+    # when that stage is skipped for budget, which the report records as
+    # a degradation. Says "did not run", not "does not exist" -- the
+    # falsification pass has been wired into run_audit.py since Day 8,
+    # and the older wording told a reader of a degraded report that the
+    # feature was missing.
+    return Verification(reproduced=False, method="single-pass detection; falsification pass did not run")
 
 
 def _extract_title(html: str) -> str | None:
@@ -139,58 +146,100 @@ def _parse_iso_date(value: str) -> date | None:
         return None
 
 
+def _stalest_date_on_page(html: str, reference_date: date) -> tuple[str, str, int] | None:
+    """The single oldest over-threshold (prop, raw, age_days) on one page,
+    or None. Oldest rather than first-found so the evidence quotes the
+    worst case on the page, and so the result doesn't depend on JSON-LD
+    block ordering."""
+    oldest: tuple[str, str, int] | None = None
+    for block in extract_json_ld(html):
+        for node in walk(block):
+            for prop in _DATE_PROPERTIES:
+                raw = node.get(prop)
+                if not raw or not isinstance(raw, str):
+                    continue
+                parsed = _parse_iso_date(raw)
+                if parsed is None:
+                    continue
+                age_days = (reference_date - parsed).days
+                if age_days > _STALE_THRESHOLD_DAYS and (oldest is None or age_days > oldest[2]):
+                    oldest = (prop, raw, age_days)
+    return oldest
+
+
 def detect_staleness(pages: dict[str, str], *, reference_date: date | None = None) -> Finding | None:
     """A page's JSON-LD claims a dateModified/datePublished well over a
     year old. Not proof the content is wrong -- proof it hasn't been
     reviewed recently, which matters for freshness-sensitive claims
     (pricing, availability) an assistant might otherwise treat as
-    current just because the page loaded successfully today."""
+    current just because the page loaded successfully today.
+
+    Scans the whole corpus and reports once, aggregated. The original
+    implementation returned from inside the page loop on the first stale
+    date it saw, which produced a `Scope(checked=1, affected=1)` finding
+    no matter how much of the site was stale -- a 40-page archive and a
+    single forgotten page were indistinguishable in the report. Worse,
+    the understated scope fed straight into `finding-verification`'s
+    sample-adequacy check and into `severity = f(stage, blast_radius,
+    confidence)`, so a genuinely site-wide freshness problem could not
+    reach the blast radius it deserved."""
     reference_date = reference_date or date.today()
+    stale: list[tuple[str, str, str, int]] = []  # (url, prop, raw, age_days)
     for url in sorted(pages):
-        for block in extract_json_ld(pages[url]):
-            for node in walk(block):
-                for prop in _DATE_PROPERTIES:
-                    raw = node.get(prop)
-                    if not raw or not isinstance(raw, str):
-                        continue
-                    parsed = _parse_iso_date(raw)
-                    if parsed is None:
-                        continue
-                    age_days = (reference_date - parsed).days
-                    if age_days > _STALE_THRESHOLD_DAYS:
-                        confidence = Confidence.MEDIUM  # staleness is a risk signal, not proof of a wrong fact
-                        severity = compute_severity(Stage.CITE, BlastRadius.DEGRADES, confidence)
-                        return Finding(
-                            id=_next_id(),
-                            title=f"{url}: {prop} is {age_days} days old ({raw})",
-                            severity=severity,
-                            stage=Stage.CITE,
-                            taxonomy_id="TRUST-006",
-                            scope=Scope(checked=1, affected=1),
-                            evidence=f"{prop}={raw!r}, {age_days} days before {reference_date.isoformat()}",
-                            artifacts=[Artifact(url=url, selector=f"application/ld+json .{prop}")],
-                            confidence=confidence,
-                            verification=_unverified(),
-                            impact_mechanism=(
-                                f"A {prop} this old signals the page hasn't been reviewed in over a "
-                                "year -- an assistant citing freshness-sensitive facts (pricing, "
-                                "availability, current offerings) from this page has no signal that "
-                                "they might be stale."
-                            ),
-                            affected_queries=[],
-                            suggested_action=SuggestedAction(
-                                summary=f"Review this page's content and update its {prop} to reflect the actual last-reviewed date.",
-                                priority=severity,
-                                impact="low",
-                                effort="low",
-                                confidence=confidence,
-                                stage_unblocked=Stage.CITE,
-                                implementation=[f"Update {prop} in JSON-LD after reviewing the page content"],
-                                verification_step=f"curl -s {url} | grep {prop}",
-                                rationale_ref="references/taxonomy.md#trust-006",
-                            ),
-                        )
-    return None
+        found = _stalest_date_on_page(pages[url], reference_date)
+        if found is not None:
+            stale.append((url, *found))
+    if not stale:
+        return None
+
+    # Widest blast radius the evidence supports: a majority-stale corpus is
+    # a page-class problem, one stale page among many is a local one.
+    by_age = sorted(stale, key=lambda s: (-s[3], s[0]))
+    worst_url, worst_prop, worst_raw, worst_age = by_age[0]
+    blast = BlastRadius.PAGE_CLASS if len(stale) > len(pages) / 2 else BlastRadius.DEGRADES
+    confidence = Confidence.MEDIUM  # staleness is a risk signal, not proof of a wrong fact
+    severity = compute_severity(Stage.CITE, blast, confidence)
+    return Finding(
+        id=_next_id(),
+        title=f"{len(stale)} of {len(pages)} page(s) carry a last-updated date over a year old",
+        severity=severity,
+        stage=Stage.CITE,
+        taxonomy_id="TRUST-006",
+        scope=Scope(checked=len(pages), affected=len(stale)),
+        evidence="; ".join(
+            f"{u}: {prop}={raw!r} ({age} days before {reference_date.isoformat()})"
+            for u, prop, raw, age in by_age[:5]
+        ),
+        artifacts=[
+            Artifact(url=u, selector=f"application/ld+json .{prop}") for u, prop, _, _ in by_age[:3]
+        ],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            f"A {worst_prop} this old signals the page hasn't been reviewed in over a "
+            "year -- an assistant citing freshness-sensitive facts (pricing, "
+            "availability, current offerings) from this page has no signal that "
+            "they might be stale."
+        ),
+        affected_queries=[],
+        suggested_action=SuggestedAction(
+            summary=(
+                f"Review these {len(stale)} page(s) and update their last-modified dates to "
+                "reflect the actual last-reviewed date."
+            ),
+            priority=severity,
+            impact="low",
+            effort="low",
+            confidence=confidence,
+            stage_unblocked=Stage.CITE,
+            implementation=[
+                f"Update {worst_prop} in JSON-LD after reviewing the page content",
+                f"Start with the oldest: {worst_url} ({worst_raw})",
+            ],
+            verification_step=f"curl -s {worst_url} | grep {worst_prop}",
+            rationale_ref="references/taxonomy.md#trust-006",
+        ),
+    )
 
 
 # --- TRUST-007: description drift -------------------------------------------

@@ -97,6 +97,20 @@ FIXTURES: dict[str, FixtureExpectation] = {
         certified_clean_stages={"arrive"},
         note="Brand named up top on every page, a CTA on every page, an analytics snippet, no redirects/consent overlay (Day 7 DoD control).",
     ),
+    "non-english": FixtureExpectation(
+        port=8134,
+        certified_clean_stages={"reach", "extract", "retrieve", "arrive"},
+        note=(
+            "A deliberately well-built German site: lang=\"de\", brand named up top on every page, "
+            "JSON-LD on two, prices in both schema and prose, three German CTAs. The four stages "
+            "certified here are the ones where an English-only lexicon shows up as a false positive "
+            "-- before the language guard this fixture produced CHUNK-001, ENGAGE-005, a false "
+            "headline and five false intent-gap recommendations. CITE is deliberately NOT certified "
+            "clean: its TRUST-007/TRUST-008 findings here are real defects of the fixture (drifting "
+            "descriptions, unattributed numbers) that a German reader would agree with, and word "
+            "overlap and numeral density are language-independent measurements."
+        ),
+    ),
 }
 
 # retrieval-answerable (8129) is evaluated separately below -- its ground

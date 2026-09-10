@@ -8,8 +8,10 @@ not itself emit findings.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import time
+import zlib
 from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 from xml.etree import ElementTree
@@ -145,6 +147,31 @@ async def fetch_llms_txt(client: httpx.AsyncClient, base_url: str, robots: Robot
     return resp.status_code < 400, resp.status_code
 
 
+def _maybe_gunzip(content: bytes) -> bytes:
+    """Transparently decompress a gzipped sitemap body.
+
+    Large sites routinely declare `sitemap.xml.gz` in robots.txt. Whether
+    `httpx` has already decompressed it depends entirely on how the
+    server labelled it: `Content-Encoding: gzip` is handled by the
+    transport, but a `.gz` file served as `Content-Type: application/gzip`
+    -- which is the *correct* labelling for a gzip file, and what most
+    servers do -- arrives as raw gzip bytes. Those hit
+    `ElementTree.fromstring` as binary, raise `ParseError`, and the
+    sitemap is skipped silently: `urls` stays empty, the fallback to
+    `[base_url]` fires, and a 50,000-URL site gets audited as one page.
+
+    Sniffing the two-byte gzip magic number rather than trusting the URL
+    suffix or the content type, since both are frequently wrong and the
+    magic number never is.
+    """
+    if content[:2] == b"\x1f\x8b":
+        try:
+            return gzip.decompress(content)
+        except (OSError, EOFError, zlib.error):
+            return content  # truncated or lying about being gzip -- let the XML parser reject it
+    return content
+
+
 async def discover_sitemap_urls(
     client: httpx.AsyncClient, base_url: str, robots: RobotsPolicy, max_urls: int = 500
 ) -> tuple[list[str], bool]:
@@ -177,19 +204,27 @@ async def discover_sitemap_urls(
         if resp.status_code >= 400:
             continue
         try:
-            root = ElementTree.fromstring(resp.content)
+            root = ElementTree.fromstring(_maybe_gunzip(resp.content))
         except ElementTree.ParseError:
             continue
         sitemap_fetch_ok = True
 
+        # `{*}` matches any namespace (or none). Binding the literal
+        # sitemaps.org 0.9 namespace instead -- the obvious way to write
+        # this -- silently returned zero URLs for two shapes that are
+        # common in the wild: a bare `<urlset>` with no xmlns at all, and
+        # the legacy `google.com/schemas/sitemap/0.84` namespace. Both
+        # then fell through to the `[base_url]` fallback, so the whole
+        # site got audited as a single page with no error anywhere.
+        # `root.tag.lower()` already ignores the namespace for the
+        # index-vs-urlset decision, so this makes the two consistent.
         tag = root.tag.lower()
-        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         if tag.endswith("sitemapindex"):
-            for loc in root.findall(".//sm:sitemap/sm:loc", ns):
+            for loc in root.findall(".//{*}sitemap/{*}loc"):
                 if loc.text:
                     candidates.append(loc.text.strip())
         else:  # urlset
-            for loc in root.findall(".//sm:url/sm:loc", ns):
+            for loc in root.findall(".//{*}url/{*}loc"):
                 if loc.text:
                     urls.append(loc.text.strip())
 

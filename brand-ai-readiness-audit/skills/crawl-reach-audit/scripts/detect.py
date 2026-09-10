@@ -42,10 +42,14 @@ def _next_id() -> str:
 
 
 def _unverified() -> Verification:
-    # finding-verification (the falsification pass) isn't wired up yet
-    # (Day 8) -- honest placeholder rather than claiming a reproduction
-    # check that didn't happen.
-    return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
+    # Detector-local placeholder. `finding-verification` overwrites this
+    # for every finding it processes; it survives into the report only
+    # when that stage is skipped for budget, which the report records as
+    # a degradation. Says "did not run", not "does not exist" -- the
+    # falsification pass has been wired into run_audit.py since Day 8,
+    # and the older wording told a reader of a degraded report that the
+    # feature was missing.
+    return Verification(reproduced=False, method="single-pass detection; falsification pass did not run")
 
 
 def detect_ai_ua_block(site: str, robots: RobotsPolicy, sample_urls: list[str]) -> list[Finding]:

@@ -299,3 +299,202 @@ Final output for openai.com: `reach: fail` with one `REACH-007` critical, every 
 Regression coverage added: a `_WafBlockingHandler` fixture serving a permissive `robots.txt` and `sitemap.xml` while 403-ing every page — reproducing the openai.com shape locally — asserting that REACH still speaks up, that no ARRIVE finding is emitted, and that `proactive_recommendations` is empty. Plus a unit test that an empty corpus yields no recommendations even with a full matrix. 174 tests passing (was 172); confusion matrix unchanged at precision 1.00 / recall 1.00 / FP-rate 0.00.
 
 *Next session should:* the project is now feature-complete against all 10 days of the build plan. If more time becomes available: chase the "honest gaps" the README's own Limitations section lists (a WordPress site in the wild sweep, `TRUST-007`'s title/footer fields, a second contradiction-check taxonomy family beyond `EXTRACT-002`), or extend the dedup table in `assemble_report.py` if a second genuine same-root-cause cross-stage pair gets identified. None of these block shipping; they're the honest next-increment list, not blockers.
+
+---
+
+### Post-Day-10 addendum 4 — an external issues report, triaged claim by claim
+
+An externally-produced audit of this repo (`ISSUES_AUDIT_REPORT.md`, 25
+issues from CRITICAL to COSMETIC) was handed in for action. Every claim
+was checked against the code before anything was changed. Three of the
+25 did not reproduce as described, one reproduced through a different
+mechanism than the one alleged, and one turned out to be substantially
+worse than reported. That triage mattered more than the fix count: the
+two "CRITICAL" items were the report's headline, and only one of them
+was right about *why* it crashed.
+
+**Confirmed and fixed (7).**
+
+1. **`extract_json_ld` raised on malformed JSON-LD**, and nothing in
+   EXTRACT, RETRIEVE or CITE caught it — one bad block on one sampled
+   page ended the whole audit. Confirmed against `extruct` directly, and
+   the reported trigger list was incomplete: an *empty*
+   `<script type="application/ld+json"></script>` raises on its own, and
+   that tag ships in a lot of CMS themes. Fixed with a per-block salvage
+   parse rather than a blanket `return []`, so a page with three good
+   blocks and one broken one still contributes three; the legacy
+   `// <![CDATA[` and HTML-comment wrappers browsers accept are handled
+   too. Noted honestly in the docstring: a page whose *only* block is
+   malformed is now indistinguishable from a page with no JSON-LD, so
+   `EXTRACT-002` calls it missing rather than broken. That is the less
+   wrong of the two available answers, but a dedicated "malformed
+   JSON-LD" taxonomy entry would say it better.
+
+2. **`fetch_many` crashed on unparseable URLs — but not for the reported
+   reason.** The report said `mailto:`/`tel:`/`javascript:`/whitespace
+   URLs raise `httpx.InvalidURL` in the per-host lock lookup. They don't:
+   `httpx.URL()` returns an empty host for all of them, and the eventual
+   `client.get` failure is an `UnsupportedProtocol`, which *is* an
+   `HTTPError` and was already caught. Verified end-to-end before
+   touching anything. The real hole is a hostname `idna` refuses to
+   encode: that raises `httpx.InvalidURL` (a bare `Exception`) or
+   `idna.IDNAError` (a `ValueError`), neither of which subclasses
+   `HTTPError` — and the report was right that the lock lookup sits
+   outside the try block. Reachable from ordinary input, since sitemap
+   `<loc>` entries are just CMS-authored text. Fixed at both sites with
+   an explicit `FETCH_ERRORS` tuple rather than `except Exception`, so a
+   genuine bug in the module still surfaces as a crash instead of being
+   recorded as a fetch failure.
+
+3. **Sitemap namespace binding silently discarded whole sites.** The
+   XPath bound the literal sitemaps.org 0.9 namespace, so a bare
+   `<urlset>` with no `xmlns` and the legacy `google.com/schemas/
+   sitemap/0.84` namespace both returned zero URLs — which fell through
+   to the documented `[base_url]` fallback, so a 50,000-URL site was
+   audited as one page with nothing anywhere reporting that discovery had
+   failed. Switched to `{*}` wildcard matching, which also makes the
+   URL lookup consistent with the `root.tag.lower()` check right above it
+   that already ignored the namespace.
+
+4. **Gzipped sitemaps were skipped.** Whether `httpx` decompresses
+   depends entirely on labelling: `Content-Encoding: gzip` is handled by
+   the transport, but a `.gz` file served as `Content-Type:
+   application/gzip` — the *correct* labelling, and what most servers do
+   — arrives as raw bytes, hits `ElementTree.fromstring`, raises
+   `ParseError`, and gets skipped into the same one-page fallback.
+   Fixed by sniffing the two-byte gzip magic number, not the URL suffix
+   or content type, since both are frequently wrong and the magic number
+   never is.
+
+5. **`EXTRACT-003` masked every heading skip after a page's first deep
+   heading.** Comparing each heading against a running *maximum* rather
+   than the preceding heading: a running maximum never decreases, but a
+   document outline does — `h1 > h2 > h3 > h2 > h3` is correct HTML and
+   every sibling section legitimately resets the working depth. After an
+   `h4` in section 1, a section 2 going `h2 > h5` passed (`5 > 4 + 1` is
+   false). A false *negative*, so it never showed up in precision
+   testing.
+
+6. **`TRUST-006` returned on the first stale page it found**, reporting
+   `Scope(checked=1, affected=1)` however much of the site was stale — a
+   40-page stale archive and one forgotten page were indistinguishable in
+   the report, and the understated scope fed straight into the
+   sample-adequacy check and into `severity = f(stage, blast_radius,
+   confidence)`. Now aggregates across the corpus, leads its evidence
+   with the oldest page, and reaches `PAGE_CLASS` blast radius when a
+   majority of the corpus is stale.
+
+7. **`ENGAGE-002` let a generic token stand in for the brand.** The check
+   was a set intersection against the raw entity name, so "Rowan Cast
+   Iron Co." tokenized to include `co` and any opening prose containing
+   "co-op", "co-founder" or "company" satisfied it without ever naming
+   Rowan. Generic legal forms and sub-3-character tokens are now dropped,
+   with a fallback to the full set so an entity genuinely named "The
+   Company" still gets checked against something. Left deliberately
+   satisfiable by any one *distinctive* token: that under-reports rather
+   than over-reports, and precision is what is scored.
+
+**Confirmed, and much worse than reported — the English-only pipeline.**
+The report listed this as MAJOR and predicted "massive false negatives."
+It was not tested; `zalando.de` was the wild sweep's non-English site and
+was unreachable from this network on Day 9, so this had never actually
+been observed. So it was measured. A German fixture was built to be
+*genuinely good* (`tests/fixtures/non-english`: `lang="de"`, brand named
+up top on every page, JSON-LD on two, prices in both schema and prose,
+three German CTAs, analytics, `sameAs`, clean heading hierarchy) — an
+English equivalent produces essentially nothing. It audited as:
+
+```
+15 of 18 buyer-intent queries unanswerable
+headline: "15 of 18 buyer-intent queries are unanswerable ..."
+CHUNK-001   medium  (false)
+ENGAGE-005  medium  "no recognizable next step"  (false)
++ 5 "No page answers X-intent questions" proactive recommendations  (false)
+```
+
+The pricing page's own sentence reads `Der Bergquell A1
+Aktivkohlefilter kostet 149,00 EUR` — a verbatim, attributable answer to
+a pricing query — and the probe called it UNGROUNDED. Only the three
+identity queries passed, and only because a brand name is the one token
+that survives translation. This was the single largest false-positive
+source in the tool, and every one of those findings would have been
+emitted with full confidence.
+
+Fixed the way stage ② already handles a missing Playwright, because it is
+the same situation — an instrument that isn't available for this input:
+`brand_audit.language` detects the corpus language from `<html lang>` by
+majority vote; when it declares a language the bundled lexicons don't
+cover, the answerability probe doesn't run at all, stage ④ reports
+`skipped`, `ENGAGE-005` is suppressed, and the degradation names the
+language. Entity detection still runs (JSON-LD `name`, `<title>`, `<h1>`
+— none of which depend on the query bank) since stage ⑥ needs the entity
+name. An *undeclared* language counts as covered: the same asymmetry as
+the `pages_examined` check from addendum 3 — act on an explicit
+declaration, never on an absence — because treating "no lang attribute"
+as unsupported would skip the crown-jewel stage on the very large number
+of ordinary English sites that never set it, trading a real
+false-positive class for a much larger false-negative one.
+
+The German fixture is now the sixth clean control in the published
+confusion matrix, certifying the four stages where an English-only
+lexicon shows up as a false positive. CITE is deliberately *not*
+certified clean on it: its `TRUST-007`/`TRUST-008` findings there are
+real defects of the fixture (drifting descriptions, unattributed
+numbers) that a German reader would agree with, and word overlap and
+numeral density are language-independent measurements.
+
+**Fixed while adjacent (3).** The `_unverified()` placeholder said
+"falsification pass not yet implemented" in all six detector modules —
+a stale *user-facing* string, not just a stale comment: it ships into the
+report whenever verification is budget-skipped, telling a reader of a
+degraded report that a feature wired up on Day 8 doesn't exist. Now says
+"did not run". `normalize_site` prepended `https://` unconditionally, so
+`run_audit.py localhost:8000` — the obvious way to try the tool against
+your own dev server — failed on an SSL error with nothing pointing at the
+missing scheme; loopback hosts now default to `http`, and a real host that
+merely contains the word "localhost" still gets `https`. Windows notes
+(the `npx.ps1` execution-policy block, the venv activate path) added to
+`CLAUDE.md`.
+
+**Checked and deliberately not changed (6),** each now written into the
+README's Limitations section with its reasoning rather than left silent:
+the one-rule stemmer (a real gap — "price" doesn't match "Pricing" — but
+a 12-point fixture is no basis for changing the retriever, and this
+project's own rule is that a detector change needs measured
+justification); `ENGAGE-004`'s consent-library signature match;
+`ENGAGE-007`'s client-side latency measurement; no retry/backoff on
+429/503; Linux-only CI; and the hardcoded fixture ports. That last one is
+larger than the report understood — every fixture's `robots.txt`,
+`sitemap.xml` and internal links embed absolute `http://localhost:<port>`
+URLs, so ephemeral ports mean templating roughly twenty fixture files at
+serve time, i.e. changing the published eval corpus itself. Not worth the
+regression risk for a local-collision annoyance.
+
+**Not reproduced (3).** `mailto:`/`tel:`/`javascript:`/whitespace URLs
+crashing the crawl (see 2 above); `ISSUE-14`'s and `ISSUE-15`'s framing as
+defects. `ISSUE-15` is already in the README's Limitations section
+verbatim. `ISSUE-14` reads the first half of `_infer_blast_radius`'s
+docstring and stops: the same docstring goes on to argue that the
+imprecision is harmless, because further discounting an already-LOW
+confidence recomputes to MEDIUM whether the true radius was
+`PAGE_CLASS`, `SITE_WIDE` or `DEGRADES` — so the recomputed severity is
+correct either way. Not a defect, and not a gap in the report; the
+inversion is deliberate and reasoned where it happens. And `ISSUE-25` (a
+favicon 404 in a server log) refers to a `server.py` this repo does not
+contain.
+
+*One bug of my own, caught by a test I wrote:* the first `<html lang>`
+regex used `\b` before `lang`, which matches happily between the hyphen
+and the `l` of `data-lang` — an attribute i18n frameworks set freely and
+which routinely disagrees with the document's real language. Requiring
+whitespace fixed it; `xml:lang` is accepted as the equivalent it is.
+
+Validation: **227 tests passing** (was 174), manifest lint clean, no
+schema drift, all 8 skills valid via `skills-ref`, three runs of the new
+fixture byte-identical modulo `audited_at`, and the confusion matrix
+unchanged at **precision 1.00 / recall 1.00 / FP-rate 0.00** — now over
+13 certified-clean stage checks rather than 9. Re-audited allbirds.com
+live at the sample report's own parameters (`--max-pages 12
+--skip-render`): identical findings, identical sample seed, identical
+readiness — the fixes change behaviour on broken and non-English input
+and nowhere else.

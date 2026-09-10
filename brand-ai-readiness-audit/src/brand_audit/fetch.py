@@ -16,6 +16,19 @@ from .crawl import DEFAULT_FETCH_UA
 DEFAULT_CONCURRENCY = 8
 DEFAULT_PER_HOST_DELAY_S = 0.25  # politeness delay between requests to the same host
 
+# Everything a single URL can plausibly fail with, so one bad URL degrades
+# to a FetchOutcome-with-error instead of ending the crawl.
+#
+# `httpx.HTTPError` alone is not enough: `httpx.InvalidURL` does not
+# subclass it (it is a bare Exception), and a hostname `idna` refuses to
+# encode raises `idna.IDNAError`, which comes from neither package's
+# hierarchy -- it is a `ValueError`. Both escape a bare
+# `except httpx.HTTPError` and both are reachable from a sitemap `<loc>`,
+# which is just CMS-authored text. Kept as an explicit tuple rather than
+# `except Exception` so a genuine bug in this module still surfaces as a
+# crash instead of being silently recorded as a fetch failure.
+FETCH_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
+
 
 @dataclass
 class FetchOutcome:
@@ -44,7 +57,27 @@ async def fetch_many(
     host_locks: dict[str, asyncio.Lock] = {}
 
     def lock_for(url: str) -> asyncio.Lock:
-        host = httpx.URL(url).host
+        """Per-host politeness lock, total over *any* string.
+
+        `httpx.URL()` raises on a hostname it can't IDNA-encode --
+        `httpx.InvalidURL` for a malformed host or port, and an
+        `idna.IDNAError` straight out of the `idna` package for a bad
+        punycode label. Neither subclasses `httpx.HTTPError`, and this
+        call sits *outside* `fetch_one`'s try block, so either one
+        escaped the gather and ended the crawl. Reachable from ordinary
+        input: sitemap `<loc>` entries are attacker-and-CMS-controlled
+        text, and internationalized domains are exactly where a bad
+        label shows up.
+
+        Falling back to a shared lock keyed by the raw string is safe --
+        the URL is about to fail its own fetch anyway, and the lock only
+        governs politeness spacing, so a wrong bucket costs a little
+        serialization, not correctness.
+        """
+        try:
+            host = httpx.URL(url).host
+        except Exception:
+            host = url
         return host_locks.setdefault(host, asyncio.Lock())
 
     async def fetch_one(client: httpx.AsyncClient, url: str) -> FetchOutcome:
@@ -53,7 +86,7 @@ async def fetch_many(
                 try:
                     resp = await client.get(url, timeout=timeout_s)
                     await asyncio.sleep(per_host_delay_s)
-                except httpx.HTTPError as exc:
+                except FETCH_ERRORS as exc:
                     return FetchOutcome(url=url, record=None, error=str(exc))
             record = FetchRecord(
                 url=url,
@@ -92,6 +125,6 @@ async def probe_user_agents(url: str, user_agents: list[str], *, timeout_s: floa
                     headers=dict(resp.headers),
                 )
                 results[ua] = FetchOutcome(url=url, record=record)
-            except httpx.HTTPError as exc:
+            except FETCH_ERRORS as exc:
                 results[ua] = FetchOutcome(url=url, record=None, error=str(exc))
     return results

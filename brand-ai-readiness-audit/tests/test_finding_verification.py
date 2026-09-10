@@ -46,7 +46,7 @@ def _finding(
         evidence=evidence,
         artifacts=[Artifact(url=url, http_status=http_status)],
         confidence=confidence,
-        verification=Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented"),
+        verification=Verification(reproduced=False, method="single-pass detection; falsification pass did not run"),
         impact_mechanism="mechanism",
         affected_queries=[],
         suggested_action=SuggestedAction(

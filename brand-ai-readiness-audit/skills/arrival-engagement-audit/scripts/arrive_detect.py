@@ -50,7 +50,14 @@ def _next_id() -> str:
 
 
 def _unverified() -> Verification:
-    return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
+    # Detector-local placeholder. `finding-verification` overwrites this
+    # for every finding it processes; it survives into the report only
+    # when that stage is skipped for budget, which the report records as
+    # a degradation. Says "did not run", not "does not exist" -- the
+    # falsification pass has been wired into run_audit.py since Day 8,
+    # and the older wording told a reader of a degraded report that the
+    # feature was missing.
+    return Verification(reproduced=False, method="single-pass detection; falsification pass did not run")
 
 
 # --- ENGAGE-001: answer proximity -------------------------------------------
@@ -147,14 +154,49 @@ def _orientation_finding(url: str, evidence: str, confidence: Confidence) -> Fin
     )
 
 
+# Legal forms and corporate filler carry no identifying power: they say
+# what kind of thing the entity is, never which one. Matched after
+# `tokenize` (lowercased, stemmed), so plural forms appear in their
+# stemmed shape.
+_GENERIC_ENTITY_TOKENS = frozenset(
+    "co corp corporation inc incorporated llc llp ltd limited plc gmbh ag "
+    "bv nv sa sas srl spa oy ab as kk pty group holding company companie "
+    "brand studio studios labs online official site website store shop".split()
+)
+
+
+def _distinctive_entity_tokens(entity_name: str) -> frozenset[str]:
+    """The tokens of `entity_name` that actually identify *this* brand.
+
+    Token-level matching against the raw entity name let a single generic
+    token stand in for the whole brand: "Rowan Cast Iron Co." tokenizes to
+    include "co", so any page whose opening prose happened to contain
+    "co-op" or "co-founder" satisfied the orientation check without ever
+    naming Rowan. Two-letter tokens are the worst offenders, but the same
+    hole exists for "group", "studio" and every legal suffix.
+
+    Falls back to the full token set when filtering would leave nothing --
+    an entity genuinely named "The Company" should still be checked
+    against something rather than skipped."""
+    tokens = frozenset(tokenize(entity_name))
+    distinctive = frozenset(t for t in tokens if len(t) > 2 and t not in _GENERIC_ENTITY_TOKENS)
+    return distinctive or tokens
+
+
 def detect_orientation_gap(url: str, html: str, entity_name: str) -> Finding | None:
     """Does this specific citable page's own main content name the
     brand near the top -- without relying on the nav/logo a deep-linked,
-    never-browsed-here visitor never scans?"""
+    never-browsed-here visitor never scans?
+
+    Still satisfied by *any one* distinctive token, so a multi-word brand
+    whose least-distinctive word is a category noun ("Iron" in "Rowan Cast
+    Iron") can pass on a page that never says "Rowan". That direction is
+    deliberate: it under-reports rather than over-reports, and precision
+    is what this project optimizes for."""
     text = trafilatura.extract(html) or ""
     if not text:
         return None  # nothing to check here -- RENDER/EXTRACT's problem, not ENGAGE's
-    entity_tokens = frozenset(tokenize(entity_name))
+    entity_tokens = _distinctive_entity_tokens(entity_name)
     if not entity_tokens:
         return None  # entity name itself didn't tokenize (e.g. the "the site" fallback) -- nothing to check against
     body_tokens = frozenset(tokenize(text))
@@ -493,6 +535,8 @@ def run_arrival_engagement_audit(
     all_pages: dict[str, str],
     matrix: list[AnswerabilityMatrixEntry],
     entity_name: str,
+    *,
+    english_lexicons_apply: bool = True,
 ) -> list[Finding]:
     """citable_pages/citable_records: the pages that actually won a
     buyer-intent query in stage (4) (`citable=True` in the
@@ -500,7 +544,19 @@ def run_arrival_engagement_audit(
     actually land on, per this stage's own persona framing. all_pages:
     the full stage (1) survivor set, needed for ENGAGE-003's redirect-
     destination lookup and ENGAGE-006's site-wide instrumentation check.
-    """
+
+    `english_lexicons_apply=False` suppresses ENGAGE-005, whose CTA
+    phrase list is English-only: on a German corpus it reported "no
+    recognizable next step" for pages whose next step was a "Jetzt
+    bestellen" link (see brand_audit.language). The stage's other six
+    detectors stay on -- they read redirects, analytics snippets,
+    response latency, consent-library signatures and the brand's own
+    name, none of which are English-dependent.
+
+    ENGAGE-003's locale-gate phrase list is English-only too, but its
+    failure direction is the safe one: an unrecognized phrase means no
+    finding, never a wrong one, so it is left running rather than
+    suppressed."""
     findings: list[Finding] = []
 
     buried = detect_buried_answers(matrix)
@@ -519,7 +575,7 @@ def run_arrival_engagement_audit(
 
     for f in (
         detect_entry_interference(citable_pages),
-        detect_missing_next_step(citable_pages),
+        detect_missing_next_step(citable_pages) if english_lexicons_apply else None,
         detect_no_ai_referral_instrumentation(all_pages),
         detect_slow_citable_pages(citable_records),
     ):

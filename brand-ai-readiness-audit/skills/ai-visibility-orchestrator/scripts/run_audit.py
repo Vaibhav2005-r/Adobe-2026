@@ -53,6 +53,7 @@ from brand_audit.crawl import (  # noqa: E402
     stratified_sample,
 )
 from brand_audit.fetch import fetch_many, probe_user_agents  # noqa: E402
+from brand_audit.language import detect_corpus_language, lexicons_cover  # noqa: E402
 from brand_audit.artifact_store import ArtifactStore  # noqa: E402
 from brand_audit.models import Stage, StageResult  # noqa: E402
 
@@ -66,10 +67,26 @@ from render_html import render_html_report  # noqa: E402
 from render_markdown import render_markdown_summary  # noqa: E402
 
 
+# Loopback and RFC-6761 `.localhost` names: a dev server on one of these
+# is overwhelmingly plain HTTP, and defaulting it to https produces an
+# SSL handshake error that reads like the audit is broken rather than
+# like a scheme mismatch.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"})
+
+
 def normalize_site(site: str) -> str:
-    if not site.startswith(("http://", "https://")):
-        site = "https://" + site
-    return site
+    """Add a scheme when the user didn't type one.
+
+    https for real hosts; http for loopback. Blanket-https meant
+    `run_audit.py localhost:8000` -- the obvious way to try the tool
+    against your own dev server, and the first thing anyone evaluating it
+    does -- failed on an SSL error, with nothing pointing at the missing
+    `http://`."""
+    if site.startswith(("http://", "https://")):
+        return site
+    host = site.split("/", 1)[0].rsplit(":", 1)[0] if not site.startswith("[") else site.split("]", 1)[0] + "]"
+    scheme = "http://" if host.lower() in _LOOPBACK_HOSTS else "https://"
+    return scheme + site
 
 
 async def run_reach_stage(
@@ -256,7 +273,12 @@ def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResu
 
 
 def run_retrieve_stage(
-    reach_corpus_urls: list[str], reach_outcomes: list, empty_shell_urls: frozenset[str], base_url: str
+    reach_corpus_urls: list[str],
+    reach_outcomes: list,
+    empty_shell_urls: frozenset[str],
+    base_url: str,
+    *,
+    probe_enabled: bool = True,
 ) -> tuple[StageResult, list, retrieve_detect.Entity]:
     """The answerability probe. Composition contract: consumes the
     stage (1) survivors, minus any page stage (2) proved is an empty
@@ -285,7 +307,9 @@ def run_retrieve_stage(
         if url in raw_by_url and url not in empty_shell_urls
     }
 
-    matrix, retrieve_findings, entity = retrieve_detect.run_retrieval_simulation(pages, homepage_url=base_url)
+    matrix, retrieve_findings, entity = retrieve_detect.run_retrieval_simulation(
+        pages, homepage_url=base_url, probe_enabled=probe_enabled
+    )
 
     stage_result = StageResult(
         stage=Stage.RETRIEVE,
@@ -293,7 +317,12 @@ def run_retrieve_stage(
         corpus_delta=list(pages),
         metrics={
             "pages_indexed": len(pages),
-            "pages_examined": len(pages),
+            # Zero when the probe was disabled for an unsupported corpus
+            # language, so `_readiness_for_stage` reports the stage
+            # `skipped` rather than `pass` -- a probe that never ran must
+            # not read as one that ran and found nothing wrong.
+            "pages_examined": len(pages) if probe_enabled else 0,
+            "answerability_probe_run": probe_enabled,
             "pages_excluded_empty_shell": len(empty_shell_urls),
             "entity_name": entity.name,
             "entity_source": entity.source,
@@ -334,7 +363,12 @@ def run_cite_stage(corpus_urls: list[str], reach_outcomes: list, base_url: str) 
 
 
 def run_arrive_stage(
-    reach_corpus_urls: list[str], reach_outcomes: list, matrix: list, entity: retrieve_detect.Entity
+    reach_corpus_urls: list[str],
+    reach_outcomes: list,
+    matrix: list,
+    entity: retrieve_detect.Entity,
+    *,
+    english_lexicons_apply: bool = True,
 ) -> StageResult:
     """Mid-task arrival model. Composition contract: reads the
     answerability_matrix stage (4) already computed -- `citable=True`
@@ -377,7 +411,8 @@ def run_arrive_stage(
         citable_records = {u: record_by_url[u] for u in citable_urls if u in record_by_url}
 
     findings = arrive_detect.run_arrival_engagement_audit(
-        citable_pages, citable_records, all_pages, matrix, entity.name
+        citable_pages, citable_records, all_pages, matrix, entity.name,
+        english_lexicons_apply=english_lexicons_apply,
     )
 
     return StageResult(
@@ -460,6 +495,22 @@ async def main_async(args: argparse.Namespace) -> int:
         extract_result = run_extract_stage(reach_result.corpus_delta, reach_outcomes)
         stage_results.append(extract_result)
 
+    # What language is this corpus actually in? The buyer-intent query
+    # bank, the BM25 stopword list and ENGAGE-005's CTA phrases are all
+    # English-only, and pointed at another language they don't degrade --
+    # they report confident nonsense. Measured on the corpus that
+    # survived REACH, so a blocked or empty corpus yields None and the
+    # lexicons stay enabled (nothing to contradict them).
+    corpus_html = {
+        o.url: o.record.text
+        for o in reach_outcomes
+        if o.record is not None and o.url in set(reach_result.corpus_delta)
+    }
+    corpus_language = detect_corpus_language(corpus_html)
+    english_lexicons_apply = lexicons_cover(corpus_language)
+    if not english_lexicons_apply:
+        degradations.append(f"english_only_lexicons_suppressed_corpus_language_{corpus_language}")
+
     # RETRIEVE is also pure computation (chunking + BM25 are in-memory,
     # no network) -- same budget-gating rationale as EXTRACT.
     answerability_matrix = []
@@ -468,7 +519,8 @@ async def main_async(args: argparse.Namespace) -> int:
         degradations.append("retrieve_stage_skipped_low_budget")
     else:
         retrieve_result, answerability_matrix, retrieve_entity = run_retrieve_stage(
-            reach_result.corpus_delta, reach_outcomes, empty_shell_urls, site
+            reach_result.corpus_delta, reach_outcomes, empty_shell_urls, site,
+            probe_enabled=english_lexicons_apply,
         )
         stage_results.append(retrieve_result)
 
@@ -489,7 +541,8 @@ async def main_async(args: argparse.Namespace) -> int:
         degradations.append("arrive_stage_skipped_retrieve_unavailable")
     else:
         arrive_result = run_arrive_stage(
-            reach_result.corpus_delta, reach_outcomes, answerability_matrix, retrieve_entity
+            reach_result.corpus_delta, reach_outcomes, answerability_matrix, retrieve_entity,
+            english_lexicons_apply=english_lexicons_apply,
         )
         stage_results.append(arrive_result)
 

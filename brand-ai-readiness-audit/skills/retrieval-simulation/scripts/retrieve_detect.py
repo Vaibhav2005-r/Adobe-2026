@@ -52,7 +52,14 @@ def _next_id() -> str:
 
 
 def _unverified() -> Verification:
-    return Verification(reproduced=False, method="single-pass detection; falsification pass not yet implemented")
+    # Detector-local placeholder. `finding-verification` overwrites this
+    # for every finding it processes; it survives into the report only
+    # when that stage is skipped for budget, which the report records as
+    # a degradation. Says "did not run", not "does not exist" -- the
+    # falsification pass has been wired into run_audit.py since Day 8,
+    # and the older wording told a reader of a degraded report that the
+    # feature was missing.
+    return Verification(reproduced=False, method="single-pass detection; falsification pass did not run")
 
 
 # --- entity detection ---------------------------------------------------
@@ -448,12 +455,25 @@ def detect_cross_page_join_reliance(
 
 
 def run_retrieval_simulation(
-    pages: dict[str, str], homepage_url: str | None = None
+    pages: dict[str, str], homepage_url: str | None = None, *, probe_enabled: bool = True
 ) -> tuple[list[AnswerabilityMatrixEntry], list[Finding], Entity]:
     """pages: {url: raw_html} for the AI-reachable corpus (already
     gated through stages (1)/(2) by the caller -- this function doesn't
-    re-derive that gate, per the composition contract)."""
+    re-derive that gate, per the composition contract).
+
+    `probe_enabled=False` runs entity detection and stops: no queries,
+    no matrix, no findings. The caller sets it when the corpus declares a
+    language the bundled query bank doesn't cover (see
+    brand_audit.language), because the probe is an English-language
+    instrument and a German corpus makes it report 15/18 unanswerable on
+    a site that answers all 18 in German. Entity detection still runs --
+    it reads a JSON-LD `name`, a `<title>` and an `<h1>`, none of which
+    depend on the query bank -- and stage (6) needs the entity name.
+    Same contract as a missing Playwright: skip the measurement, suppress
+    the findings, record the degradation, never guess."""
     entity = detect_entity(pages, homepage_url)
+    if not probe_enabled:
+        return [], [], entity
     entity_tokens = frozenset(tokenize(entity.name))
     queries = expand_queries(entity)
 

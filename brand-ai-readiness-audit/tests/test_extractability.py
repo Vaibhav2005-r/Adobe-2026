@@ -243,3 +243,35 @@ def test_clean_product_fixture_has_zero_false_positives(tmp_path):
     extract_findings = [f for f in report["findings"] if f["stage"] == "extract"]
     assert extract_findings == []
     assert report["summary"]["ai_readiness"]["extract"] == "pass"
+
+
+# --- EXTRACT-003: heading skips in later sections ----------------------------
+
+
+def _headings(levels: list[int]) -> str:
+    body = "".join(f"<h{lvl}>Heading {i}</h{lvl}>" for i, lvl in enumerate(levels))
+    return f"<html><body><main>{body}<p>{'word ' * 80}</p></main></body></html>"
+
+
+def _skip_count(levels: list[int]) -> int:
+    findings = extract_detect.detect_heading_hierarchy_issues("https://example.com/", _headings(levels))
+    return sum(f.evidence.count("heading level skip") for f in findings)
+
+
+def test_heading_skip_in_a_later_section_is_not_masked_by_an_earlier_deep_heading():
+    # h1 > h2 > h3 > h4 (fine), then a new section h2 > h5 (a real skip).
+    # Comparing against a running *maximum* rather than the previous
+    # heading made this pass -- 5 > max(4) + 1 is false -- so every skip
+    # after the page's first deep heading went unreported.
+    assert _skip_count([1, 2, 3, 4, 2, 5]) == 1, "the h2 -> h5 skip in the second section should be reported"
+
+
+def test_descending_back_up_the_outline_is_not_a_skip():
+    # Sibling sections legitimately reset the working depth; this is
+    # correct HTML and must stay silent.
+    assert _skip_count([1, 2, 3, 2, 3]) == 0
+    assert _skip_count([1, 2, 3, 1]) == 0
+
+
+def test_every_skip_on_the_page_is_reported_not_just_the_first():
+    assert _skip_count([1, 3, 2, 5]) == 2

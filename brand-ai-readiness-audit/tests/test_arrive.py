@@ -277,3 +277,57 @@ def test_arrive_stage_is_byte_identical_across_three_runs(tmp_path):
         # internal decision), so no further scrubbing needed for determinism.
 
     assert report_a == report_b == report_c
+
+
+# --- ENGAGE-002: a generic token must not stand in for the brand ------------
+
+
+def test_a_generic_corporate_token_does_not_satisfy_the_orientation_check():
+    # "Rowan Cast Iron Co." tokenizes to include "co", so any opening prose
+    # containing "co-op", "co-founder" or "company" passed the check
+    # without the page ever naming Rowan.
+    lead = "Our co-op works in close collaboration with the company next door. " + "Filler text. " * 20
+    html = f"<html><body><h1>Cookware</h1><p>{lead}</p></body></html>"
+    finding = ad.detect_orientation_gap("https://example.com/x", html, "Rowan Cast Iron Co.")
+    assert finding is not None
+    assert finding.taxonomy_id == "ENGAGE-002"
+
+
+def test_a_genuine_brand_mention_still_passes():
+    html = (
+        "<html><body><h1>Rowan</h1><p>Rowan Cast Iron Co. makes seasoned skillets in Ohio. "
+        + "Filler. " * 30
+        + "</p></body></html>"
+    )
+    assert ad.detect_orientation_gap("https://example.com/x", html, "Rowan Cast Iron Co.") is None
+
+
+def test_generic_tokens_are_dropped_but_never_all_of_them():
+    assert ad._distinctive_entity_tokens("Rowan Cast Iron Co.") == frozenset({"rowan", "cast", "iron"})
+    assert ad._distinctive_entity_tokens("Acme Corp") == frozenset({"acme"})
+    # An entity made entirely of generic tokens keeps them: checking
+    # against something beats skipping the check.
+    assert ad._distinctive_entity_tokens("Co Ltd") == frozenset({"co", "ltd"})
+
+
+# --- ENGAGE-005 is an English-language instrument ---------------------------
+
+
+def test_cta_check_is_suppressed_when_the_english_lexicons_do_not_apply():
+    # The CTA phrase list is English-only. On a German corpus it reported
+    # "no recognizable next step" for pages whose next step was a "Jetzt
+    # bestellen" link -- so the caller turns it off rather than guessing.
+    pages = {
+        "https://example.de/a": "<html><body><main><p>Kein Aufruf hier.</p>"
+        '<a href="/b">Jetzt bestellen</a></main></body></html>'
+    }
+    assert ad.detect_missing_next_step(pages) is not None, "the English-only detector does fire here"
+
+    findings = ad.run_arrival_engagement_audit(pages, {}, pages, [], "Bergquell", english_lexicons_apply=False)
+    assert [f for f in findings if f.taxonomy_id == "ENGAGE-005"] == []
+
+
+def test_cta_check_still_runs_by_default():
+    pages = {"https://example.com/a": "<html><body><main><p>No call to action anywhere here.</p></main></body></html>"}
+    findings = ad.run_arrival_engagement_audit(pages, {}, pages, [], "Acme")
+    assert [f for f in findings if f.taxonomy_id == "ENGAGE-005"] != []
