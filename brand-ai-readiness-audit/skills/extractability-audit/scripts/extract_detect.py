@@ -8,6 +8,7 @@ taxonomy entry in `ai-visibility-orchestrator/references/taxonomy.md`.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,6 +56,40 @@ def _load_schema_subset() -> dict:
     return json.loads(_SCHEMA_SUBSET_PATH.read_text(encoding="utf-8"))
 
 
+# Above this many distinct prices, the page is a listing/collection, not a
+# product page -- see the guard in detect_schema_text_contradiction.
+_LISTING_PAGE_PRICE_COUNT = 4
+
+_BARE_NUMBER_RE = re.compile(r"(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,])")
+
+
+def _visible_price_values(visible_text: str) -> set[float]:
+    """Every number in the visible text that could be a price -- both the
+    symbol-prefixed ones (`Rs 499`, `$49.00`) and bare numerals.
+
+    Bare numerals matter because `_CURRENCY_RE` requires a currency symbol
+    *adjacent to the digits*, and a very common way to write prices does
+    not: a table with a `Price (INR)` column header states every value as
+    a bare number, with the symbol factored out into the header exactly
+    once. Requiring adjacency there means the detector concludes the
+    visible text contains no price at all -- which was the premise of a
+    real false positive on thesouledstore.com, whose own price table
+    reads `Harry Potter: Potter Chibi | 499` while the finding claimed
+    JSON-LD's 499 matched nothing visible.
+
+    Deliberately loose, because of how it's used: this set is only ever
+    consulted to *suppress* a contradiction claim, never to raise one. A
+    bare number that isn't really a price can only cost a finding this
+    detector was going to make; it can never manufacture one. The narrow,
+    symbol-anchored `extract_facts` currency set is what still gets
+    reported as evidence."""
+    values = {v for c in extract_facts(visible_text)["currency"] if (v := normalize_currency_value(c)) is not None}
+    for token in _BARE_NUMBER_RE.findall(visible_text):
+        if (v := normalize_currency_value(token)) is not None:
+            values.add(v)
+    return values
+
+
 def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
     """EXTRACT-001: JSON-LD claims a price the visible text doesn't
     corroborate. Normalizes both sides to a float before comparing --
@@ -68,9 +103,31 @@ def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
         return []
 
     visible_text = trafilatura.extract(html) or ""
+    # What gets *reported* as evidence: the narrow, symbol-anchored set.
     visible_currency_values = {
         v for c in extract_facts(visible_text)["currency"] if (v := normalize_currency_value(c)) is not None
     }
+    # What gets *tested* against: the looser set, so a price written
+    # without an adjacent symbol still counts as corroboration.
+    corroborating_values = _visible_price_values(visible_text)
+
+    # A listing page carries one Offer per product in a grid. This rule's
+    # mechanism is a *single* product's schema price disagreeing with that
+    # same product's visible price, and it has no way to tell which of a
+    # page's twenty visible prices belongs to which Offer -- so "does this
+    # price appear anywhere on the page" is the wrong question there,
+    # answerable by coincidence in both directions. Found on
+    # thesouledstore.com, where a women's-shorts collection page ships 24
+    # Offer blocks and the detector reported the first one as a
+    # contradiction.
+    distinct_prices = {
+        v
+        for root in blocks
+        for node in walk(root)
+        if (raw := node.get("price")) is not None and (v := normalize_currency_value(raw)) is not None
+    }
+    if len(distinct_prices) > _LISTING_PAGE_PRICE_COUNT:
+        return []
 
     seen_prices: set[float] = set()
     for root in blocks:
@@ -82,7 +139,7 @@ def detect_schema_text_contradiction(url: str, html: str) -> list[Finding]:
             if normalized is None or normalized in seen_prices:
                 continue
             seen_prices.add(normalized)
-            if visible_currency_values and normalized not in visible_currency_values:
+            if visible_currency_values and normalized not in corroborating_values:
                 confidence = Confidence.HIGH
                 severity = compute_severity(Stage.EXTRACT, BlastRadius.PAGE_CLASS, confidence)
                 findings.append(

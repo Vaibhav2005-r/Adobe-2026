@@ -2,7 +2,7 @@
 
 **7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus**
 
-Audited 2026-08-29 09:26:25.740732+00:00 · 12 pages crawled, 0 rendered · 38.9s
+Audited 2026-09-10 16:53:16.561804+00:00 · 12 pages crawled, 0 rendered · 27.0s
 
 ## Funnel status
 
@@ -14,7 +14,7 @@ Audited 2026-08-29 09:26:25.740732+00:00 · 12 pages crawled, 0 rendered · 38.9
 
 | Critical | High | Medium | Low | Total |
 |---|---|---|---|---|
-| 0 | 0 | 6 | 6 | 12 |
+| 0 | 0 | 4 | 1 | 5 |
 
 Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 simulated buyer-intent queries).
 
@@ -23,24 +23,14 @@ Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 sim
 1. **[MEDIUM]** Add direct, front-loaded answers to buyer-intent questions in the site's own language, not just marketing narrative. _(unblocks retrieve, impact: high, effort: medium)_
 2. **[MEDIUM]** Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages. _(unblocks retrieve, impact: medium, effort: medium)_
 3. **[MEDIUM]** Name the brand explicitly in the page's opening content, not just in the nav/logo. _(unblocks arrive, impact: low, effort: low)_
-4. **[MEDIUM]** Name the brand explicitly in the page's opening content, not just in the nav/logo. _(unblocks arrive, impact: low, effort: low)_
-5. **[MEDIUM]** Name the brand explicitly in the page's opening content, not just in the nav/logo. _(unblocks arrive, impact: low, effort: low)_
-6. **[MEDIUM]** Make consent/gate overlays non-blocking: render page content first, or default to a reasonable choice instead of gating first paint. _(unblocks arrive, impact: medium, effort: medium)_
-7. **[LOW]** Use exactly one <h1> per page and avoid heading-level skips. _(unblocks extract, impact: low, effort: low)_
-8. **[LOW]** Use exactly one <h1> per page and avoid heading-level skips. _(unblocks extract, impact: low, effort: low)_
-9. **[LOW]** Use exactly one <h1> per page and avoid heading-level skips. _(unblocks extract, impact: low, effort: low)_
-10. **[LOW]** Use exactly one <h1> per page and avoid heading-level skips. _(unblocks extract, impact: low, effort: low)_
+4. **[MEDIUM]** Make consent/gate overlays non-blocking: render page content first, or default to a reasonable choice instead of gating first paint. _(unblocks arrive, impact: medium, effort: medium)_
+5. **[LOW]** Use exactly one <h1> per page and avoid heading-level skips. _(unblocks extract, impact: low, effort: low)_
 
 ## Findings by stage
 
 ### ③ EXTRACT
 
-- **[LOW] https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
-- **[LOW] https://www.allbirds.com/products/mens-wool-runners-true-black: heading hierarchy issue(s) -- no <h1> found** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
-- **[LOW] https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard: heading hierarchy issue(s) -- no <h1> found** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
-- **[LOW] https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red: heading hierarchy issue(s) -- no <h1> found** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
-- **[LOW] https://www.allbirds.com/products/mens-strider-medium-grey: heading hierarchy issue(s) -- no <h1> found** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
-- **[LOW] https://www.allbirds.com/products/womens-tree-dashers-rustic-brown: heading hierarchy issue(s) -- no <h1> found** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
+- **[LOW] 6 of 12 page(s): heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')** (`EXTRACT-003`, confidence: high, checked 12/affected 6)
 
 ### ④ RETRIEVE
 
@@ -49,9 +39,7 @@ Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 sim
 
 ### ⑥ ARRIVE
 
-- **[MEDIUM] https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 1/affected 1)
-- **[MEDIUM] https://www.allbirds.com/products/mens-wool-runners-true-black: a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 1/affected 1)
-- **[MEDIUM] https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 1/affected 1)
+- **[MEDIUM] 3 of 4 page(s): a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 4/affected 3)
 - **[MEDIUM] 4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint** (`ENGAGE-004`, confidence: medium, checked 4/affected 4)
 
 ## Proactive recommendations (no defect found)

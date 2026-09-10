@@ -31,6 +31,7 @@ from brand_audit.models import (  # noqa: E402
     Finding,
     ReadinessStatus,
     RunManifest,
+    Scope,
     Severity,
     Stage,
     StageResult,
@@ -142,12 +143,118 @@ def _merge_same_root_cause(findings: list[Finding]) -> list[Finding]:
     return result
 
 
-def dedup_findings(findings: list[Finding]) -> list[Finding]:
-    """Exact-duplicate collapse, then known-pair cross-stage merge --
-    order matters, since a merge's evidence-note append should only
-    ever touch the single surviving copy of a finding, not a duplicate
-    that's about to be dropped anyway."""
-    return _merge_same_root_cause(_dedup_exact(findings))
+def _strip_url_prefix(title: str, urls: set[str]) -> str:
+    """`"https://x.com/a: Organization is missing name"` ->
+    `"Organization is missing name"`.
+
+    Per-page detectors build titles as `f"{url}: {what}"`. Only strips a
+    prefix that is literally one of the finding's own artifact URLs, so a
+    title that merely happens to contain a colon is left alone."""
+    for url in urls:
+        prefix = f"{url}: "
+        if title.startswith(prefix):
+            return title[len(prefix) :]
+    return title
+
+
+def _aggregation_key(f: Finding) -> tuple:
+    """Two findings share a key when they are the same defect on
+    different pages.
+
+    Keyed on the *fix*, not on the text of the evidence: findings that
+    resolve to an identical `suggested_action` at identical severity and
+    confidence are, to the person reading the report, one item of work.
+    That criterion is deliberately reader-facing, and it's also
+    conservative in the right direction -- `implementation` is part of
+    the key, so `EXTRACT-002` missing `name` never merges with
+    `EXTRACT-002` missing `logo` (their implementation lines name the
+    property), while twenty pages missing `name` from the same template
+    collapse to one."""
+    a = f.suggested_action
+    return (f.stage, f.taxonomy_id, f.severity, f.confidence, a.summary, tuple(a.implementation))
+
+
+def _aggregate_per_page_findings(findings: list[Finding], pages_examined: dict[Stage, int]) -> list[Finding]:
+    """Collapse per-page findings of the same defect into one finding
+    scoped across the corpus.
+
+    The build plan's Day 8 line is "one root cause must not emit six
+    findings", and until now this module honoured that only for known
+    cross-*stage* pairs. The within-stage case is the one that actually
+    bites: auditing thesouledstore.com produced **26 separate
+    `EXTRACT-002` findings**, one per page, each reading
+    `Scope(checked=1, affected=1)` and each carrying the identical
+    suggested action -- so the report's prioritized action list was
+    fourteen consecutive copies of "Add the missing required property to
+    the Organization structured data." One site-wide template defect,
+    rendered as twenty-six items of work. That fails the rubric line the
+    report exists to satisfy ("a non-expert could act on"), and it
+    understates the defect at the same time: twenty-six findings claiming
+    `checked=1` never add up to the site-wide problem they are.
+
+    Only merges groups whose members all report `checked == 1`, i.e.
+    genuinely single-page findings. A detector that already aggregates
+    (`RENDER-001`, `TRUST-006`, `TRUST-008`, `ENGAGE-004/005`) has
+    computed a real corpus-level scope and is left untouched.
+
+    `checked` on the merged finding comes from the stage's own
+    `pages_examined` metric, not from the group size: the honest
+    denominator is how many pages the stage looked at, so 26 of 40 reads
+    as 26 of 40 rather than as 26 of 26."""
+    groups: dict[tuple, list[Finding]] = {}
+    for f in findings:
+        groups.setdefault(_aggregation_key(f), []).append(f)
+
+    result: list[Finding] = []
+    merged_away: set[str] = set()
+    for group in groups.values():
+        if len(group) < 2 or not all(f.scope.checked == 1 for f in group):
+            continue
+        primary = group[0]
+        urls = [a.url for f in group for a in f.artifacts]
+        checked = max(pages_examined.get(primary.stage, len(group)), len(group))
+        page_class = next((f.scope.page_class for f in group if f.scope.page_class), None)
+        suffix = _strip_url_prefix(primary.title, {a.url for a in primary.artifacts})
+        merged = primary.model_copy(
+            update={
+                "title": f"{len(group)} of {checked} page(s): {suffix}",
+                "scope": Scope(checked=checked, affected=len(group), page_class=page_class),
+                # Each member's evidence is page-local and doesn't name its
+                # own URL, so pair them up here or the merged evidence says
+                # what is wrong without saying where.
+                "evidence": "; ".join(
+                    f"{a.url}: {f.evidence}" for f in group[:5] for a in f.artifacts[:1]
+                )
+                + (f" (+{len(group) - 5} more)" if len(group) > 5 else ""),
+                "artifacts": [a for f in group[:3] for a in f.artifacts[:1]],
+                "affected_queries": sorted({q for f in group for q in f.affected_queries}),
+            }
+        )
+        merged_away.update(f.id for f in group)
+        result.append(merged)
+
+    # Rebuild in the original order, substituting each group's merged
+    # finding at the position its first member held, so report ordering
+    # stays deterministic and severity-ordered downstream.
+    merged_by_id = {f.id: f for f in result}
+    out: list[Finding] = []
+    for f in findings:
+        if f.id in merged_by_id:
+            out.append(merged_by_id[f.id])
+        elif f.id not in merged_away:
+            out.append(f)
+    return out
+
+
+def dedup_findings(findings: list[Finding], pages_examined: dict[Stage, int] | None = None) -> list[Finding]:
+    """Exact-duplicate collapse, then known-pair cross-stage merge, then
+    within-stage per-page aggregation -- order matters. The exact-collapse
+    runs first so a merge's evidence-note append only ever touches the
+    single surviving copy of a finding. Aggregation runs last, on the
+    settled set, so it never merges a finding that a cross-stage rule was
+    about to drop anyway."""
+    findings = _merge_same_root_cause(_dedup_exact(findings))
+    return _aggregate_per_page_findings(findings, pages_examined or {})
 
 
 def _readiness_for_stage(findings: list[Finding], stage_results: list[StageResult], stage: Stage) -> ReadinessStatus:
@@ -203,7 +310,15 @@ def assemble_report(
     outputs -> validated report" happens, per its own composition
     contract, so the invariant needs to hold regardless of how the
     caller got here."""
-    findings = dedup_findings(findings if findings is not None else [f for r in stage_results for f in r.findings])
+    pages_examined = {
+        r.stage: r.metrics["pages_examined"]
+        for r in stage_results
+        if isinstance(r.metrics.get("pages_examined"), int)
+    }
+    findings = dedup_findings(
+        findings if findings is not None else [f for r in stage_results for f in r.findings],
+        pages_examined,
+    )
     observations = observations or []
     answerability_matrix = answerability_matrix or []
     proactive_recommendations = proactive_recommendations or []

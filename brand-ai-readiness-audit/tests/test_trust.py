@@ -233,3 +233,36 @@ def test_evidence_leads_with_the_oldest_page_not_an_arbitrary_one():
 def test_malformed_json_ld_on_a_page_does_not_crash_the_staleness_scan():
     pages = {"https://example.com/a": '<html><body><script type="application/ld+json">{broken</script></body></html>'}
     assert td.detect_staleness(pages, reference_date=_REF) is None
+
+
+# --- TRUST-005: a whole-site check must actually look at the whole site -----
+
+
+def _org(name: str, same_as: str | None = None) -> str:
+    sa = f', "sameAs": {same_as}' if same_as else ""
+    return f'<html><body><script type="application/ld+json">{{"@type":"Organization","name":"{name}"{sa}}}</script></body></html>'
+
+
+def test_an_anchored_entity_anywhere_in_the_corpus_clears_the_finding():
+    # The original implementation returned on the *first unanchored*
+    # entity in sorted-URL order, so a site whose homepage is properly
+    # anchored and whose product template carries a thinner Organization
+    # block was reported as unanchored purely because of URL ordering --
+    # contradicting the detector's own "whole-site check" framing.
+    pages = {
+        "https://example.com/a": _org("Acme"),
+        "https://example.com/z": _org("Acme", '["https://www.wikidata.org/wiki/Q1"]'),
+    }
+    assert td.detect_missing_entity_anchoring(pages) is None
+
+
+def test_anchoring_scope_counts_pages_not_the_first_hit():
+    pages = {f"https://example.com/{c}": _org("Acme") for c in "abcd"}
+    finding = td.detect_missing_entity_anchoring(pages)
+    assert finding is not None
+    assert (finding.scope.checked, finding.scope.affected) == (4, 4)
+    assert len(finding.artifacts) >= 1
+
+
+def test_no_organization_block_at_all_is_not_a_finding():
+    assert td.detect_missing_entity_anchoring({"https://example.com/a": "<html><body>x</body></html>"}) is None

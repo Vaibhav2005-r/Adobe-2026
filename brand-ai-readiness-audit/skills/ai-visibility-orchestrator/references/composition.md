@@ -92,6 +92,34 @@ finding as primary, regardless of severity -- consistent with this
 whole document's thesis: the earlier stage's framing is the root cause,
 the later stage's is the symptom.
 
+A third pass, `_aggregate_per_page_findings`, then collapses the
+*within*-stage case: the same defect found on many pages becomes one
+finding scoped across the corpus. Several detectors run per page and
+emit per page, which is the right shape for detection and the wrong
+shape for a report -- auditing thesouledstore.com produced 26 separate
+`EXTRACT-002` findings, one per page, each reading `checked: 1,
+affected: 1` and each carrying the identical suggested action, so the
+prioritized action list was fourteen consecutive copies of the same
+sentence for a single site-wide template defect. Twenty-six findings
+claiming `checked: 1` also never add up to the site-wide problem they
+are, which starves both the severity function and the sample-adequacy
+check of real scope.
+
+Findings are grouped by the *fix* -- stage, taxonomy id, severity,
+confidence, and the exact `suggested_action` summary and implementation
+steps. That criterion is deliberately reader-facing (two findings that
+resolve to identical work are one item to the person acting on the
+report) and conservative in the right direction: because
+`implementation` is part of the key, `EXTRACT-002` missing `name` never
+merges with `EXTRACT-002` missing `logo`, since their implementation
+lines name the property. Only groups whose members all report
+`checked == 1` are merged, so a detector that already computed a real
+corpus-level scope (`RENDER-001`, `TRUST-005`, `TRUST-006`,
+`TRUST-008`, `ENGAGE-004`, `ENGAGE-005`) is left alone rather than
+having a measured denominator overwritten by a guess. The merged
+`checked` comes from the stage's own `pages_examined` metric, so 26 of
+40 reads as 26 of 40 rather than as 26 of 26.
+
 ## Pipeline order and current status
 
 ```

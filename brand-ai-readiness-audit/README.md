@@ -33,7 +33,7 @@ A real report, committed and ready to open: [`sample-report/`](sample-report/)
 (allbirds.com, `report.html` is the one to open in a browser).
 
 ```bash
-python -m pytest tests/ -v                    # 227 tests, no network needed
+python -m pytest tests/ -v                    # 236 tests, no network needed
 python scripts/eval_fixtures.py                # fixture confusion matrix
 ```
 
@@ -400,7 +400,7 @@ LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
 scripts/eval_fixtures.py        maintainer eval harness -- not a shipped skill
-tests/                          227 tests + local fixture sites (no live network needed)
+tests/                          236 tests + local fixture sites (no live network needed)
 docs/build-plan.md              the full 10-day plan this was built against
 docs/progress.md                the honest day-by-day accounting, including every bug found and fixed
 ```

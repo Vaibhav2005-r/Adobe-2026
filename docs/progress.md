@@ -498,3 +498,115 @@ live at the sample report's own parameters (`--max-pages 12
 --skip-render`): identical findings, identical sample seed, identical
 readiness — the fixes change behaviour on broken and non-English input
 and nowhere else.
+
+---
+
+### Post-Day-10 addendum 5 — auditing thesouledstore.com: one root cause, twenty-six findings
+
+A live audit of `thesouledstore.com` (an Indian DTC apparel retailer, 40
+pages) produced a 32-finding report whose prioritized action list was
+**fourteen consecutive copies of the same sentence**. Two distinct
+defects, one of precision and one of output design.
+
+**1. The report's headline finding was a false positive.** `EXTRACT-001`
+claimed `JSON-LD price (499) doesn't match any visible-text price` on a
+women's-shorts page. Checked against the live page: the page's own main
+content contains a price table reading `| Harry Potter: Potter Chibi |
+499 |`. The claim was simply false, and it shipped at `high` severity
+with `confidence: high` and `reproduced: true` — the falsification pass
+re-fetched the artifact and confirmed the URL still resolved, which is
+all it checks, so a wrong claim reproduced cleanly.
+
+Two independent causes, both fixed:
+
+- **`_CURRENCY_RE` requires a currency symbol adjacent to the digits.**
+  A table with a `Price (INR)` column header factors the symbol out into
+  the header exactly once and states every value as a bare number — a
+  completely ordinary way to write prices, and invisible to the regex.
+  Corroboration is now checked against bare numerals as well. The looser
+  set is only ever consulted to *suppress* a contradiction claim, never
+  to raise one, so a bare number that isn't really a price can cost this
+  detector a finding but can never manufacture one; the narrow
+  symbol-anchored set is still what gets reported as evidence. (This is
+  `ISSUE-09` from addendum 4's external report, which I had triaged as a
+  documented false-*negative* tradeoff. It is also a false-positive
+  source, which changes its priority entirely — the earlier triage was
+  right about the mechanism and wrong about the consequence.)
+- **The rule ran on a listing page.** Its mechanism is a *single*
+  product's schema price disagreeing with that same product's visible
+  price. This page ships 24 `Offer` blocks in a product grid, so
+  "does this price appear anywhere on the page" is answerable by
+  coincidence in both directions. Above four distinct prices the page is
+  now treated as a collection and skipped.
+
+**2. Twenty-six identical `EXTRACT-002` findings.** One per page, each
+reading `Scope(checked=1, affected=1)`, each with the identical
+suggested action, for a single site-wide template defect (the
+`Organization` JSON-LD block omits `name`). The build plan's Day 8 line
+is literally "dedup/merge across stages — one root cause must not emit
+six findings", and `assemble_report` honoured that only for known
+cross-*stage* pairs. The within-stage case is the one that actually
+bites, and it fails the rubric line the report exists to satisfy ("a
+non-expert could act on"). It also *understates* the defect: twenty-six
+findings claiming `checked: 1` never add up to the site-wide problem
+they are, which starves both the severity function and the
+sample-adequacy check of real scope.
+
+Fixed with a third pass in `dedup_findings`,
+`_aggregate_per_page_findings`, grouping by the **fix** — stage,
+taxonomy id, severity, confidence, and the exact `suggested_action`
+summary and implementation steps. That criterion is reader-facing (two
+findings resolving to identical work are one item to the person acting
+on the report) and conservative in the right direction: because
+`implementation` is part of the key, `EXTRACT-002` missing `name` never
+merges with `EXTRACT-002` missing `logo`. Only groups whose members all
+report `checked == 1` merge, so the detectors that already compute a
+real corpus scope are left alone rather than having a measured
+denominator overwritten. The merged `checked` comes from the stage's own
+`pages_examined` metric, so 26 of 40 reads as 26 of 40.
+
+**3. `TRUST-005` had an ordering bug, found while fixing its scope.** It
+returned on the *first unanchored* entity in sorted-URL order, so a site
+whose homepage carries a fully-anchored `Organization` block and whose
+product template carries a thinner one would be reported as unanchored
+purely because `/a` sorts before `/z` — directly contradicting the
+detector's own "whole-site check" docstring. Now scans the whole corpus
+before deciding, in both directions, and scopes across pages.
+
+Result on the same site: **32 findings → 6**, one line per distinct
+piece of work, each with an honest corpus-wide scope. The headline moved
+from a false per-URL claim to `26 of 40 page(s): Organization structured
+data is missing required property name`, and `extract` readiness
+correctly moved `fail → partial` once the only `high` finding (the false
+positive) was gone.
+
+*One judgement call recorded rather than "fixed":* `ENGAGE-005` fired
+with `4 of 5 citable pages have no recognizable next step`, which looks
+like an obvious false positive on an e-commerce site. Checked against
+the live HTML: the strings "add to cart", "buy now" and "shop now" do
+not appear in the non-JS response **at all** — the product grid is
+client-rendered. For this stage's own persona (an AI-referred visitor
+arriving at what a non-JS fetcher can see) the finding is honest, and it
+is really a RENDER defect surfacing in ARRIVE on a `--skip-render` run.
+Left as-is.
+
+*The committed sample report was stale and has been regenerated.* Same
+site, same command, same detections, same readiness, same headline — but
+12 findings became 5, because six identical `EXTRACT-003` entries and
+three identical `ENGAGE-002` entries collapsed into one apiece with
+correct scopes (`6 of 12`, `3 of 4`). `sample-report/README.md` now says
+so explicitly rather than quietly changing its own numbers.
+
+Validation: **236 tests passing** (was 227), including seven new
+aggregation tests and three for `TRUST-005`'s whole-site semantics;
+confusion matrix unchanged at **precision 1.00 / recall 1.00 / FP-rate
+0.00** over 13 certified-clean stage checks; manifest lint clean; no
+schema drift; all 8 skills valid.
+
+*One test was changed rather than added:*
+`test_same_taxonomy_different_urls_are_not_collapsed` asserted through
+the public `dedup_findings` wrapper that two findings on two URLs stay
+separate. That property belongs to `_dedup_exact` and is unchanged —
+the test now calls it directly. Asserting it through the wrapper was
+asserting the *absence* of a feature that has since been added on
+purpose, so leaving it green would have meant not shipping the fix.

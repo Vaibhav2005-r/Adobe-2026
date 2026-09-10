@@ -23,14 +23,24 @@ serves one (`# Agent Instructions — Allbirds`), so the generator
 correctly stayed silent. That is the detection working in both
 directions, not a gap.
 
-12 findings across three stages on a real, well-known Shopify DTC
-site: six `EXTRACT-003` (heading-hierarchy gaps on product pages),
+5 findings across three stages on a real, well-known Shopify DTC site:
+`EXTRACT-003` (heading-hierarchy gaps, 6 of the 12 sampled pages),
 `CHUNK-001` + `CHUNK-003` (buyer-intent queries that don't resolve
-from a single page), three `ENGAGE-002` (product pages that don't name
-the brand near the top of their own content -- the deep-link
-orientation gap stage ⑥ exists to catch), and `ENGAGE-004` (a OneTrust
+from a single page), `ENGAGE-002` (3 of 4 citable pages don't name the
+brand near the top of their own content -- the deep-link orientation
+gap stage ⑥ exists to catch), and `ENGAGE-004` (a OneTrust
 consent-overlay signature on the citable page set). Zero findings were
 demoted to `observations` by `finding-verification` on this run.
+
+Each of those five is *one* line of work, scoped across the pages it
+affects. An earlier version of this snapshot listed twelve findings for
+the same five defects, because the per-page detectors each emitted one
+finding per URL: six identical `EXTRACT-003` entries and three identical
+`ENGAGE-002` entries, every one of them claiming `checked: 1,
+affected: 1`. Same detections, same readiness, same headline -- but the
+prioritized action list repeated itself, and no finding's scope added up
+to the site-wide defect it was part of. `assemble_report.
+_aggregate_per_page_findings` now collapses them.
 
 Regenerate any time with the command above -- a live site's content can
 change between runs, so this snapshot won't be byte-identical forever,

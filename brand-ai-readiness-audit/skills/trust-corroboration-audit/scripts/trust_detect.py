@@ -79,59 +79,91 @@ def _extract_meta_content(html: str, attr: str, value: str) -> str | None:
 # --- TRUST-005: entity anchoring gap ----------------------------------------
 
 
+def _named_org_nodes(html: str):
+    """Every named Organization/LocalBusiness node in a page's JSON-LD,
+    paired with whether it carries a non-empty `sameAs`."""
+    for block in extract_json_ld(html):
+        for node in walk(block):
+            types = node.get("@type")
+            types = types if isinstance(types, list) else [types]
+            if not any(t in ("Organization", "LocalBusiness") for t in types):
+                continue
+            if not node.get("name"):
+                continue
+            same_as = node.get("sameAs")
+            yield node, (len(same_as) > 0 if isinstance(same_as, list) else bool(same_as))
+
+
 def detect_missing_entity_anchoring(pages: dict[str, str]) -> Finding | None:
     """A named Organization/LocalBusiness exists in the site's own
     JSON-LD, but declares no `sameAs` links to authoritative external
     profiles (social, Wikidata, Crunchbase, ...) -- there's no
     machine-verifiable anchor tying this page's brand name to a
-    canonical identity elsewhere on the web."""
-    for url in sorted(pages):
-        for block in extract_json_ld(pages[url]):
-            for node in walk(block):
-                types = node.get("@type")
-                types = types if isinstance(types, list) else [types]
-                if not any(t in ("Organization", "LocalBusiness") for t in types):
-                    continue
-                if not node.get("name"):
-                    continue
-                same_as = node.get("sameAs")
-                has_same_as = bool(same_as) if not isinstance(same_as, list) else len(same_as) > 0
-                if has_same_as:
-                    return None  # found a properly-anchored entity -- done, whole-site check
-                confidence = Confidence.HIGH
-                severity = compute_severity(Stage.CITE, BlastRadius.DEGRADES, confidence)
-                return Finding(
-                    id=_next_id(),
-                    title=f"{node['name']} has no sameAs links to an authoritative external profile",
-                    severity=severity,
-                    stage=Stage.CITE,
-                    taxonomy_id="TRUST-005",
-                    scope=Scope(checked=1, affected=1),
-                    evidence=f"Organization JSON-LD on {url} has 'name' but no (or empty) 'sameAs'",
-                    artifacts=[Artifact(url=url, selector="application/ld+json Organization.sameAs")],
-                    confidence=confidence,
-                    verification=_unverified(),
-                    impact_mechanism=(
-                        "Without a sameAs anchor, a system trying to verify or disambiguate this "
-                        "entity (e.g. against a same-named different company) has no machine-"
-                        "readable signal pointing to an authoritative external profile -- the "
-                        "brand's identity rests entirely on unverified self-assertion."
-                    ),
-                    affected_queries=[],
-                    suggested_action=SuggestedAction(
-                        summary="Add sameAs links to the Organization JSON-LD, pointing to owned authoritative profiles (Wikidata, LinkedIn, Crunchbase, verified social accounts).",
-                        priority=severity,
-                        impact="medium",
-                        effort="low",
-                        confidence=confidence,
-                        stage_unblocked=Stage.CITE,
-                        implementation=['Add a "sameAs": [...] array to the Organization JSON-LD block'],
-                        verification_step=f"curl -s {url} | grep -A3 sameAs",
-                        rationale_ref="references/taxonomy.md#trust-005",
-                    ),
-                )
-    return None  # no Organization/LocalBusiness node found at all -- nothing to check
+    canonical identity elsewhere on the web.
 
+    Scans the whole corpus before deciding, in both directions. The
+    original implementation returned on the *first* unanchored entity it
+    saw, which contradicted its own "whole-site check" framing: a site
+    whose homepage carries a fully-anchored Organization block and whose
+    product template carries a thinner one would be reported as
+    unanchored purely because of sorted-URL ordering. One anchored entity
+    anywhere in the corpus means the brand is anchored, so that case now
+    wins wherever it appears.
+
+    Scope counts pages, not the first hit -- reporting checked=1 out of a
+    40-page crawl both understated the finding and fed a wrong denominator
+    to the sample-adequacy check in `finding-verification`."""
+    unanchored: list[tuple[str, str]] = []  # (url, entity name), at most one entry per page
+    for url in sorted(pages):
+        for node, has_same_as in _named_org_nodes(pages[url]):
+            if has_same_as:
+                return None  # anchored somewhere in the corpus -- the brand is anchored
+            if not any(u == url for u, _ in unanchored):
+                unanchored.append((url, node["name"]))
+
+    if not unanchored:
+        return None
+
+    url, name = unanchored[0]
+    confidence = Confidence.HIGH
+    severity = compute_severity(Stage.CITE, BlastRadius.DEGRADES, confidence)
+    return Finding(
+        id=_next_id(),
+        title=f"{name} has no sameAs links to an authoritative external profile",
+        severity=severity,
+        stage=Stage.CITE,
+        taxonomy_id="TRUST-005",
+        scope=Scope(checked=len(pages), affected=len(unanchored)),
+        evidence=(
+            f"{len(unanchored)} of {len(pages)} sampled page(s) carry a named Organization "
+            f"JSON-LD block with no (or empty) 'sameAs', and no page in the corpus carries "
+            f"an anchored one; first: {url}"
+        ),
+        artifacts=[
+            Artifact(url=u, selector="application/ld+json Organization.sameAs")
+            for u, _ in unanchored[:3]
+        ],
+        confidence=confidence,
+        verification=_unverified(),
+        impact_mechanism=(
+            "Without a sameAs anchor, a system trying to verify or disambiguate this "
+            "entity (e.g. against a same-named different company) has no machine-"
+            "readable signal pointing to an authoritative external profile -- the "
+            "brand's identity rests entirely on unverified self-assertion."
+        ),
+        affected_queries=[],
+        suggested_action=SuggestedAction(
+            summary="Add sameAs links to the Organization JSON-LD, pointing to owned authoritative profiles (Wikidata, LinkedIn, Crunchbase, verified social accounts).",
+            priority=severity,
+            impact="medium",
+            effort="low",
+            confidence=confidence,
+            stage_unblocked=Stage.CITE,
+            implementation=['Add a "sameAs": [...] array to the Organization JSON-LD block'],
+            verification_step=f"curl -s {url} | grep -A3 sameAs",
+            rationale_ref="references/taxonomy.md#trust-005",
+        ),
+    )
 
 # --- TRUST-006: freshness / staleness ---------------------------------------
 
