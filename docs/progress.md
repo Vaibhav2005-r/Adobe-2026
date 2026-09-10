@@ -848,3 +848,69 @@ unchanged at **precision 1.00 / recall 1.00 / FP-rate 0.00**; manifest
 lint clean; all 8 skills valid. Nothing in this addendum touches the
 handout compliance established in addendum 6 — no new dependency, no new
 manifest key, still read-only and robots-respecting.
+
+---
+
+### Post-Day-10 addendum 8 — auditing a *page* rather than a site
+
+Re-ran `https://openai.com/index/gpt-6-astra/` — the URL from addendum 3,
+whose WAF still 403s every request — to confirm those fixes held. They
+did: `reach: fail` with one critical `REACH-007`, every downstream stage
+`skipped`, zero proactive recommendations, zero observations. But the
+re-run surfaced two things addendum 3 had not.
+
+**1. The requested page was never audited.** The caller named a specific
+article; the sampler drew fifteen URLs from openai.com's sitemap and that
+article was not among them. The report's evidence listed
+`/index/fanatics-betting-gaming-andrea-ellis/`,
+`/business/partners/infosys/`, `/index/paf/` and twelve more — all real
+pages, none of them the one asked about. The site argument had only ever
+been treated as a domain seed, which is right for `example.com` and wrong
+for a deep URL: auditing fifteen other pages of the same domain and never
+the requested one answers a question nobody asked.
+
+`requested_page()` now distinguishes a site-level request
+(`example.com`, `https://example.com/`) from a page-level one (any
+non-empty path or query), and `stratified_sample` takes a `pinned` URL
+that is always included, first, and never displaced by `--max-pages`.
+Determinism is unaffected — same inputs, same output — and robots.txt,
+sitemap and `llms.txt` discovery now explicitly use the *origin* rather
+than the deep URL, which is where those files actually live. A bare
+domain pins nothing and behaves exactly as before, confirmed by
+re-running allbirds.com at the sample report's own parameters: identical
+seed, findings, readiness and matrix.
+
+**2. The report contradicted itself about answerability.** The funnel
+table correctly read `④ RETRIEVE — skipped`, and the summary directly
+beneath it read:
+
+> Answerability: 0 answerable, 0 partial, 0 ungrounded, **18
+> unretrievable** (of 18 simulated buyer-intent queries).
+
+Nothing had been fetched. BM25 over an empty index returns no chunk for
+every query, and the classifier faithfully recorded eighteen
+`UNRETRIEVABLE` rows — which a reader takes as a measured verdict on
+openai.com's content. It is the same "we could not fetch" versus "the
+answers are absent" conflation addendum 3 chased through `run_arrive_stage`
+and the proactive layer, one layer further out, and the answerability
+matrix was the last place still asserting it. `run_retrieval_simulation`
+now returns an empty matrix when the corpus is empty, so the summary
+reads all zeros and agrees with the funnel table.
+
+Worth noting why this survived addendum 3: that pass fixed everything
+that *emitted a finding or a recommendation* from an empty corpus, and
+the matrix emits neither. It is a data structure the report publishes
+directly, which is exactly why it went unchecked — and it is the single
+most quotable number in the report.
+
+Final output for the requested URL: `reach: fail` (1 critical), five
+stages `skipped`, matrix empty, answerability all zeros, and
+`https://openai.com/index/gpt-6-astra/` as the first artifact on the
+finding.
+
+Validation: **255 tests passing** (was 251), including four new ones —
+deep-URL pinning, bare-domain non-pinning, pinning determinism and
+no-duplication, and an end-to-end assertion that a fully blocked site
+publishes no matrix. Confusion matrix unchanged at precision 1.00 /
+recall 1.00 / FP-rate 0.00; manifest lint clean; all 8 skills valid;
+handout compliance untouched.

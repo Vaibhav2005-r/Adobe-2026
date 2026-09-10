@@ -343,7 +343,9 @@ def sample_seed_for(domain: str) -> str:
     return "sha256:" + hashlib.sha256(domain.encode("utf-8")).hexdigest()
 
 
-def stratified_sample(urls: list[str], seed: str, max_pages: int = 40) -> list[str]:
+def stratified_sample(
+    urls: list[str], seed: str, max_pages: int = 40, *, pinned: str | None = None
+) -> list[str]:
     """Deterministic sample via seeded URL-hash tie-break.
 
     Full page-class stratification (home / pricing / product xN / about /
@@ -352,6 +354,15 @@ def stratified_sample(urls: list[str], seed: str, max_pages: int = 40) -> list[s
     classification exists (Day 3). This function guarantees the
     determinism property the rest of the pipeline depends on: given the
     same `urls` and `seed`, the output is always byte-identical.
+
+    `pinned` is always included, first, and never displaced by the cap.
+    It carries the URL the user actually asked about: pointing the tool at
+    `https://example.com/index/some-article/` and having it audit fifteen
+    *other* pages of example.com -- never that one -- is the wrong answer
+    to the question that was asked, however deterministic the sample is.
+    Found on a real run against a specific openai.com article, where the
+    report's evidence named fifteen unrelated URLs and not the requested
+    page. Pinning stays deterministic: same inputs, same output.
     """
     deduped = sorted(set(urls))  # sort first so hash tie-break is the only
     # source of ordering -- set() iteration order is not guaranteed stable
@@ -360,8 +371,11 @@ def stratified_sample(urls: list[str], seed: str, max_pages: int = 40) -> list[s
     def rank(url: str) -> str:
         return hashlib.sha256((seed + "|" + url).encode("utf-8")).hexdigest()
 
-    ranked = sorted(deduped, key=rank)
-    return ranked[:max_pages]
+    if pinned is None:
+        return sorted(deduped, key=rank)[:max_pages]
+
+    rest = sorted((u for u in deduped if u != pinned), key=rank)
+    return [pinned] + rest[: max(0, max_pages - 1)]
 
 
 class BudgetManager:

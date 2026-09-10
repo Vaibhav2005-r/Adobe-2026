@@ -24,7 +24,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 _REPO_SRC = Path(__file__).resolve().parents[3] / "src"
 sys.path.insert(0, str(_REPO_SRC))
@@ -89,6 +89,18 @@ def normalize_site(site: str) -> str:
     return scheme + site
 
 
+def requested_page(site: str) -> str | None:
+    """The specific page the user asked about, if they named one.
+
+    `example.com` and `https://example.com/` are site-level requests --
+    audit the site. `https://example.com/index/some-article/` names a
+    page, and that page must appear in the sample: auditing fifteen other
+    pages of the same domain and never the requested one answers a
+    question nobody asked."""
+    parsed = urlparse(site)
+    return site if parsed.path not in ("", "/") or parsed.query else None
+
+
 async def run_reach_stage(
     base_url: str, max_pages: int, run_dir: Path
 ) -> tuple[StageResult, list, str]:
@@ -98,16 +110,22 @@ async def run_reach_stage(
     twice for the "raw" half of the dual-fetch differential."""
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        robots = await fetch_robots(client, base_url)
-        sitemap_urls, sitemap_fetch_ok = await discover_sitemap_urls(client, base_url, robots)
+        # robots.txt and the sitemap live at the origin, so discovery uses
+        # the site root even when the caller named a deep page.
+        origin = urlunparse(urlparse(base_url)._replace(path="/", params="", query="", fragment=""))
+        robots = await fetch_robots(client, origin)
+        sitemap_urls, sitemap_fetch_ok = await discover_sitemap_urls(client, origin, robots)
         # One extra cheap GET, robots-checked inside the helper. Its
         # absence is a proactive recommendation, never a finding --
         # llms.txt is a proposed convention, not a ratified standard.
-        llms_txt_present, llms_txt_status = await fetch_llms_txt(client, base_url, robots)
+        llms_txt_present, llms_txt_status = await fetch_llms_txt(client, origin, robots)
 
     domain = urlparse(base_url).netloc
     seed = sample_seed_for(domain)
-    sample = stratified_sample(sitemap_urls, seed, max_pages=max_pages)
+    pinned = requested_page(base_url)
+    if pinned and pinned not in sitemap_urls:
+        sitemap_urls = [pinned] + sitemap_urls
+    sample = stratified_sample(sitemap_urls, seed, max_pages=max_pages, pinned=pinned)
 
     # Robots-respecting is a hard constraint (CLAUDE.md), not a courtesy:
     # only fetch URLs our own crawl UA is actually allowed to. The

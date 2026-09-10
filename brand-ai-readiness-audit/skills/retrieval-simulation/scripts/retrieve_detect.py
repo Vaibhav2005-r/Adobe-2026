@@ -474,6 +474,21 @@ def run_retrieval_simulation(
     entity = detect_entity(pages, homepage_url)
     if not probe_enabled:
         return [], [], entity
+    if not pages:
+        # Nothing survived the gate, so there is nothing to index and
+        # nothing was measured. Running anyway is not harmless: BM25 over
+        # an empty index returns no chunk for every query, which the
+        # classifier faithfully records as 18 UNRETRIEVABLE rows -- and a
+        # report then states "0 answerable, 0 partial, 0 ungrounded, 18
+        # unretrievable (of 18 simulated buyer-intent queries)" as though
+        # it were a verdict on the site's content. Found auditing a WAF-
+        # blocked openai.com URL, where every page 403'd: the funnel table
+        # correctly said stage 4 was `skipped`, and the answerability
+        # summary directly underneath it contradicted that with a full
+        # 18-row result. "We could not fetch" is not "the answers are
+        # absent", and the matrix is the one place left that still said
+        # otherwise.
+        return [], [], entity
     entity_tokens = frozenset(tokenize(entity.name))
     queries = expand_queries(entity)
 

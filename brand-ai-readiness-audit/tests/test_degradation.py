@@ -202,3 +202,61 @@ def test_non_english_site_does_not_get_audited_by_english_lexicons(tmp_path):
     # suppression of specific instruments, not of the audit.
     assert report["summary"]["ai_readiness"]["reach"] == "pass"
     assert report["summary"]["ai_readiness"]["extract"] == "pass"
+
+
+# --- a named page must actually be audited ----------------------------------
+
+
+def test_a_deep_url_is_pinned_into_the_sample():
+    # Pointing the tool at https://example.com/index/some-article/ and
+    # having it audit fifteen *other* pages of example.com -- never that
+    # one -- answers a question nobody asked. Found on a real run against
+    # a specific openai.com article: the report's evidence named fifteen
+    # unrelated URLs and not the requested page.
+    import run_audit
+
+    requested = "https://example.com/index/some-article/"
+    assert run_audit.requested_page(requested) == requested
+    others = [f"https://example.com/p{i}" for i in range(50)]
+    sample = sample_seed_for("example.com")
+    picked = stratified_sample([requested, *others], sample, max_pages=5, pinned=requested)
+    assert picked[0] == requested
+    assert len(picked) == 5
+
+
+def test_a_bare_domain_is_not_treated_as_a_page_request():
+    import run_audit
+
+    for site in ("https://example.com", "https://example.com/"):
+        assert run_audit.requested_page(site) is None
+
+
+def test_pinning_stays_deterministic_and_does_not_duplicate():
+    requested = "https://example.com/a"
+    urls = [requested, "https://example.com/b", "https://example.com/c"]
+    seed = sample_seed_for("example.com")
+    a = stratified_sample(urls, seed, max_pages=3, pinned=requested)
+    b = stratified_sample(urls, seed, max_pages=3, pinned=requested)
+    assert a == b
+    assert a.count(requested) == 1
+
+
+def test_a_fully_blocked_site_publishes_no_answerability_matrix(tmp_path):
+    # The funnel table said stage 4 was `skipped` while the answerability
+    # summary directly underneath it reported "18 unretrievable (of 18
+    # simulated buyer-intent queries)" -- a verdict on content nothing had
+    # fetched. BM25 over an empty index returns nothing for every query,
+    # and the classifier faithfully recorded that as a measured result.
+    server = http.server.ThreadingHTTPServer(("localhost", 8133), _WafBlockingHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        report = run_audit("http://localhost:8133", tmp_path / "run")
+    finally:
+        server.shutdown()
+
+    assert report["run_manifest"]["pages_crawled"] == 0
+    assert report["answerability_matrix"] == []
+    assert report["summary"]["answerability"] == {
+        "answerable": 0, "partial": 0, "ungrounded": 0, "unretrievable": 0
+    }
+    assert report["summary"]["ai_readiness"]["retrieve"] == "skipped"
