@@ -151,8 +151,26 @@ def dedup_findings(findings: list[Finding]) -> list[Finding]:
 
 
 def _readiness_for_stage(findings: list[Finding], stage_results: list[StageResult], stage: Stage) -> ReadinessStatus:
-    if not any(r.stage == stage for r in stage_results):
+    matching = [r for r in stage_results if r.stage == stage]
+    if not matching:
         return ReadinessStatus.SKIPPED
+
+    # A stage that ran but examined *zero pages* has verified nothing, so
+    # reporting `pass` would imply a check that never happened -- the one
+    # thing this report is not allowed to do. Distinct from "ran and
+    # found no defects", which is a real pass. Found live on openai.com,
+    # where a WAF 403s every URL: EXTRACT/RETRIEVE/CITE/ARRIVE each had
+    # an empty corpus and all four reported `pass`, painting four green
+    # stages on a site nothing could be fetched from. Every stage
+    # publishes `pages_examined` for exactly this check.
+    # Fires only on an explicit declaration of zero, never on a missing
+    # key: a StageResult that simply doesn't publish the metric (a
+    # hand-built one in a test, a future stage) should keep its normal
+    # readiness rather than be silently reclassified.
+    declared = [r.metrics["pages_examined"] for r in matching if "pages_examined" in r.metrics]
+    if declared and all(n == 0 for n in declared):
+        return ReadinessStatus.SKIPPED
+
     stage_findings = [f for f in findings if f.stage == stage]
     if not stage_findings:
         return ReadinessStatus.PASS

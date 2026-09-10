@@ -278,4 +278,24 @@ Prompted to research the academic literature and find what others do better. The
 
 172 tests passing (was 161); both manifests lint clean; no schema drift; sample report regenerated and now demonstrates the proactive layer.
 
+### Post-Day-10 addendum 3 — auditing openai.com surfaced a "blocked vs. absent" conflation
+
+Asked to run the audit against a live openai.com URL. The primary finding was correct and is a textbook `REACH-007`: `robots.txt` returns 200 with `User-agent: * / Allow: /`, yet the edge returns **403 to all 15 sampled URLs**. Verified independently outside the tool before reporting it (robots.txt 200/98 bytes; two sampled pages 403 with ~9.9KB block-page bodies). `finding-verification` reproduced it with a second UA. Correctly `critical`.
+
+But the same run exposed a real bug in two places, both instances of one root cause: **a 403 is a completed HTTP transaction, so it produces a `FetchRecord`** — and downstream consumers were treating fifteen Cloudflare block pages as if they were content.
+
+**1. `run_arrive_stage` built its page set from the raw record map.** `all_pages = {url: record.text for url, record in record_by_url.items()}` included every record regardless of status, so `ENGAGE-006` scanned fifteen block pages and concluded *"no analytics instrumentation detected across 15 sampled pages"* while `pages_crawled` was 0. The other consuming stages (EXTRACT/RETRIEVE/CITE) already iterate `corpus_delta` — which stage ① filters to `status < 400` — and were never exposed. ARRIVE was the one that reached past the gate. Fixed by building `all_pages` from `reach_corpus_urls`, reusing the existing gate rather than inventing a second definition of "successful".
+
+**2. The proactive layer derived six recommendations from zero measured pages.** An entirely blocked site yields an 18/18 `UNRETRIEVABLE` matrix, which the intent-coverage generator read as "no page answers pricing questions" ×6. That conflates *"we fetched and found nothing"* with *"we could not fetch."* The `llms.txt` generator already had the right guard (`if not corpus_urls: return []`); it was hoisted to `derive_proactive_recommendations` so it covers every generator, present and future.
+
+**3. Verifying the fix exposed a third, worse instance one layer up.** With the two fixes in, the report read `reach: fail` but `extract/retrieve/cite/arrive: pass` — four green stages on a site nothing could be fetched from. Each had run and found no defects, but each had examined *zero pages*, and `pass` implies a check that never happened, which is the one thing CLAUDE.md says the report may never do. Fixed by having every stage publish a uniform `pages_examined` metric and having `_readiness_for_stage` return `SKIPPED` when a stage ran but examined nothing.
+
+Two things went wrong on the first attempt at that third fix, both caught by running it rather than reasoning about it:
+- Setting REACH's `pages_examined` to `pages_fetched_ok` marked **REACH itself** `skipped` — the one stage that *had* something to say. REACH's job explicitly includes diagnosing 403s and robots blocks, so a page it could not fetch is still a page it examined; the metric is `len(sample)`.
+- Treating a *missing* `pages_examined` key as zero reclassified a hand-built `StageResult` in `test_assemble_report.py`. The check now fires only on an explicit declaration of zero, never on absence of the key.
+
+Final output for openai.com: `reach: fail` with one `REACH-007` critical, every downstream stage honestly `skipped`, zero proactive recommendations, zero observations.
+
+Regression coverage added: a `_WafBlockingHandler` fixture serving a permissive `robots.txt` and `sitemap.xml` while 403-ing every page — reproducing the openai.com shape locally — asserting that REACH still speaks up, that no ARRIVE finding is emitted, and that `proactive_recommendations` is empty. Plus a unit test that an empty corpus yields no recommendations even with a full matrix. 174 tests passing (was 172); confusion matrix unchanged at precision 1.00 / recall 1.00 / FP-rate 0.00.
+
 *Next session should:* the project is now feature-complete against all 10 days of the build plan. If more time becomes available: chase the "honest gaps" the README's own Limitations section lists (a WordPress site in the wild sweep, `TRUST-007`'s title/footer fields, a second contradiction-check taxonomy family beyond `EXTRACT-002`), or extend the dedup table in `assemble_report.py` if a second genuine same-root-cause cross-stage pair gets identified. None of these block shipping; they're the honest next-increment list, not blockers.

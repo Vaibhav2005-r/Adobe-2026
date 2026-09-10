@@ -136,6 +136,12 @@ async def run_reach_stage(
             "pages_sampled": len(sample),
             "pages_excluded_by_robots": excluded_by_robots,
             "pages_fetched_ok": fetched_ok,
+            # REACH examines the whole sample, failures included -- diagnosing
+            # a 403 or a robots block *is* its job, so a page it could not
+            # fetch is still a page it examined. Using fetched_ok here would
+            # mark REACH "skipped" on exactly the fully-blocked site where
+            # it is the only stage with anything to say.
+            "pages_examined": len(sample),
             "robots_fetched": robots.fetched,
             "llms_txt_present": llms_txt_present,
         },
@@ -212,7 +218,7 @@ async def run_render_stage(
         stage=Stage.RENDER,
         findings=findings,
         corpus_delta=compared,
-        metrics={"pages_rendered": len(compared), "pages_render_failed": render_failed},
+        metrics={"pages_rendered": len(compared), "pages_examined": len(compared), "pages_render_failed": render_failed},
     )
     return stage_result, None, frozenset(empty_shell_urls)
 
@@ -245,7 +251,7 @@ def run_extract_stage(corpus_urls: list[str], reach_outcomes: list) -> StageResu
         stage=Stage.EXTRACT,
         findings=findings,
         corpus_delta=list(corpus_urls),
-        metrics={"pages_checked": checked},
+        metrics={"pages_checked": checked, "pages_examined": checked},
     )
 
 
@@ -287,6 +293,7 @@ def run_retrieve_stage(
         corpus_delta=list(pages),
         metrics={
             "pages_indexed": len(pages),
+            "pages_examined": len(pages),
             "pages_excluded_empty_shell": len(empty_shell_urls),
             "entity_name": entity.name,
             "entity_source": entity.source,
@@ -322,7 +329,7 @@ def run_cite_stage(corpus_urls: list[str], reach_outcomes: list, base_url: str) 
         stage=Stage.CITE,
         findings=findings,
         corpus_delta=list(pages),
-        metrics={"pages_checked": len(pages)},
+        metrics={"pages_checked": len(pages), "pages_examined": len(pages)},
     )
 
 
@@ -341,8 +348,20 @@ def run_arrive_stage(
     injected site-wide, not per-page."""
     import arrive_detect
 
+    # `reach_outcomes` carries a FetchRecord for every *completed HTTP
+    # transaction*, which includes 4xx/5xx -- a 403 block page is a
+    # successful fetch of an error document, not a page. Gate on
+    # `reach_corpus_urls` (stage (1)'s corpus_delta, already filtered to
+    # status < 400) rather than on "has a record", or this stage reads
+    # WAF block pages as if they were content. Found live on openai.com,
+    # whose edge returns 403 to every sampled URL while robots.txt says
+    # `Allow: /`: ENGAGE-006 scanned fifteen Cloudflare block pages and
+    # concluded the site had no analytics. The other consuming stages
+    # (EXTRACT/RETRIEVE/CITE) already iterate corpus_delta and were
+    # never exposed to this; ARRIVE was the one that built its page set
+    # from the raw record map instead.
     record_by_url = {o.url: o.record for o in reach_outcomes if o.record is not None}
-    all_pages = {url: record.text for url, record in record_by_url.items()}
+    all_pages = {u: record_by_url[u].text for u in reach_corpus_urls if u in record_by_url}
 
     citable_urls = sorted({e.top_chunk_url for e in matrix if e.citable and e.top_chunk_url})
     citable_pages = {u: all_pages[u] for u in citable_urls if u in all_pages}
@@ -365,7 +384,7 @@ def run_arrive_stage(
         stage=Stage.ARRIVE,
         findings=findings,
         corpus_delta=citable_urls,
-        metrics={"citable_pages_checked": len(citable_pages), "total_pages_checked": len(all_pages)},
+        metrics={"citable_pages_checked": len(citable_pages), "pages_examined": len(citable_pages), "total_pages_checked": len(all_pages)},
     )
 
 

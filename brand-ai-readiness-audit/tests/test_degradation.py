@@ -87,6 +87,66 @@ def run_audit(site: str, run_dir: Path) -> dict:
     return json.loads((run_dir / "report.json").read_text())
 
 
+class _WafBlockingHandler(http.server.SimpleHTTPRequestHandler):
+    """Serves robots.txt and sitemap.xml normally, then 403s every actual
+    page -- exactly the shape openai.com presents: a permissive
+    `Allow: /` robots.txt with an edge that blocks AI crawlers anyway.
+    A 403 is a *completed* HTTP transaction, so it produces a real
+    FetchRecord; the point of this fixture is that downstream stages
+    must not mistake a block page for content."""
+
+    def do_GET(self):  # noqa: N802 -- http.server's own naming
+        if self.path in ("/robots.txt", "/sitemap.xml"):
+            body = (
+                b"User-agent: *\nAllow: /\n"
+                if self.path == "/robots.txt"
+                else b'<?xml version="1.0" encoding="UTF-8"?>\n'
+                b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                b"<url><loc>http://localhost:8133/</loc></url>"
+                b"<url><loc>http://localhost:8133/a.html</loc></url>"
+                b"</urlset>"
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        # A realistic block page: substantial HTML, no analytics, no content.
+        body = b"<html><head><title>Access denied</title></head><body><h1>Sorry, you have been blocked</h1></body></html>"
+        self.send_response(403)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):  # keep test output quiet
+        pass
+
+
+def test_waf_blocked_site_does_not_mistake_block_pages_for_content(tmp_path):
+    # Regression for a real bug found auditing openai.com: every sampled
+    # URL 403'd, yet ARRIVE scanned the block pages and reported "no
+    # analytics found across 15 sampled pages", and the proactive layer
+    # emitted six "no page answers X-intent questions" recommendations
+    # -- all derived from a corpus of zero successfully fetched pages.
+    server = http.server.ThreadingHTTPServer(("localhost", 8133), _WafBlockingHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        report = run_audit("http://localhost:8133", tmp_path / "run")
+    finally:
+        server.shutdown()
+
+    assert report["run_manifest"]["pages_crawled"] == 0
+
+    # REACH must still speak up -- being blocked is the finding.
+    assert any(f["stage"] == "reach" for f in report["findings"]), "a fully blocked site must produce a REACH finding"
+
+    # ...but no downstream stage may claim to have examined content.
+    assert [f for f in report["findings"] if f["stage"] == "arrive"] == []
+    assert report["proactive_recommendations"] == []
+
+
 def test_site_with_no_sitemap_still_gets_audited(tmp_path):
     # No sitemap.xml file, no Sitemap: line in robots.txt -- confirms
     # discover_sitemap_urls's documented fallback (falls back to

@@ -210,6 +210,18 @@ def derive_proactive_recommendations(
     """Every recommendation traces to something measured this run. Order
     is deterministic (intent gaps sorted by intent name, then near-miss,
     then llms.txt) so the report stays byte-reproducible."""
+    if not corpus_urls:
+        # Nothing was successfully fetched, so nothing was measured, so
+        # there is nothing to derive. Without this guard an entirely
+        # *blocked* site produces "you have no page answering pricing
+        # questions" for all six intents -- conflating "we fetched and
+        # found nothing" with "we could not fetch." Found live on
+        # openai.com, where a WAF 403s every URL its own robots.txt
+        # allows: the answerability matrix came back 18/18
+        # UNRETRIEVABLE, which meant *blocked*, not *absent*. The
+        # llms.txt generator already had this guard; the intent-coverage
+        # one did not, so it is hoisted here to cover every generator.
+        return []
     recs: list[ProactiveRecommendation] = []
     recs += _recommend_missing_intent_coverage(matrix)
     recs += _recommend_near_miss_upgrades(matrix)

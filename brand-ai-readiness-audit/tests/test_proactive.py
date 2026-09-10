@@ -108,3 +108,13 @@ def test_derivation_is_deterministic():
     a = proactive.derive_proactive_recommendations(matrix, urls, "https://example.com", llms_txt_present=False)
     b = proactive.derive_proactive_recommendations(matrix, urls, "https://example.com", llms_txt_present=False)
     assert [r.model_dump() for r in a] == [r.model_dump() for r in b]
+
+
+def test_empty_corpus_yields_nothing_even_with_a_full_matrix():
+    # A blocked site produces an 18/18 UNRETRIEVABLE matrix, which means
+    # "we could not fetch", not "the answers are absent". Deriving intent
+    # gaps from it would be measuring nothing. Regression for the
+    # openai.com case (see docs/progress.md).
+    matrix = [_entry(i, AnswerabilityOutcome.UNRETRIEVABLE) for i in ("identity", "pricing", "contact")]
+    recs = proactive.derive_proactive_recommendations(matrix, [], "https://example.com", llms_txt_present=False)
+    assert recs == []
