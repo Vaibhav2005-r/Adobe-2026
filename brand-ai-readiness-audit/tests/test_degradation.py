@@ -1,4 +1,4 @@
-"""Day 9 degradation testing: docs/build-plan.md Part 7 names six
+"""Day 9 degradation testing: the project's build plan (Part 7) names six
 specific degraded conditions the pipeline must survive gracefully. Four
 already have dedicated coverage elsewhere and aren't repeated here:
 

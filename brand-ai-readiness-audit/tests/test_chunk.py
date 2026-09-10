@@ -1,5 +1,5 @@
 """Unit tests for brand_audit.chunk. Two of these exist specifically
-because building this module surfaced real bugs (see docs/progress.md):
+because building this module surfaced real bugs (recorded in the development log):
 selectolax's grouped CSS selector doesn't preserve true cross-tag
 document order, and section headings weren't part of any chunk's
 searchable text at all.

@@ -9,7 +9,7 @@ byte counts and the citation consequence.
 
 Optional dependency: `playwright`. If it's not importable, the caller
 should skip this stage entirely and suppress RENDER findings -- never
-guess. See docs/build-plan.md Part 4 / Part 8.
+guess. See the project's build plan, Parts 4 and 8.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def _unverified() -> Verification:
 # brand_audit.facts, shared with extractability-audit's schema-vs-text
 # contradiction detector. Deliberately regex-based, not a real NER
 # model: a full entity extractor would itself need model weights, which
-# the project's own constraints rule out (see docs/build-plan.md Part
+# the project's own constraints rule out (see the project's build plan, Part
 # 4). This covers 4 of the 5 fact types the build plan names -- "entity"
 # extraction is left as documented future work rather than faked with a
 # noisy heuristic.

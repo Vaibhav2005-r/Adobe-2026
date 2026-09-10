@@ -1,14 +1,14 @@
 {
   "site": "allbirds.com",
-  "audited_at": "2026-09-10T16:53:16.561804Z",
+  "audited_at": "2026-09-10T17:02:11.782174Z",
   "schema_version": "1.0.0",
   "run_manifest": {
-    "marketplace_version": "0.1.0",
+    "marketplace_version": "1.0.0",
     "rule_pack_version": "2026.08.28",
     "pages_crawled": 12,
     "pages_rendered": 0,
     "sample_seed": "sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c",
-    "duration_s": 26.99207520901109,
+    "duration_s": 28.289749415998813,
     "stages_completed": [
       "reach",
       "extract",

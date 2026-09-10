@@ -56,4 +56,4 @@ and recomputes `severity` after a confidence change, via
 decision table, documented in that function's own docstring, since
 `Finding` doesn't persist `blast_radius` directly. See
 `skills/finding-verification/scripts/verify_findings.py` and
-`docs/progress.md` at the repo root.
+this project's development log.

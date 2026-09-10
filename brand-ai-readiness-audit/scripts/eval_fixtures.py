@@ -7,14 +7,14 @@ them at once), and computes precision/recall/false-positive-rate.
 
 This is maintainer/CI tooling, not a shipped skill capability -- a judge
 running the marketplace never needs this script. It exists to satisfy
-docs/build-plan.md Part 6/Part 7 (Day 9): "compute precision, recall and
+The project's build plan, Part 6 / Part 7 (Day 9): "compute precision, recall and
 false-positive rate on the controls. Publish the confusion matrix."
 
 Ground truth is deliberately narrow and honest: a fixture only "counts"
 toward precision for the stages it actually certifies as clean (the
 same inclusion-list discipline the test suite itself uses, established
 Day 6 after an exclusion-list needed editing every time a new stage
-landed -- see docs/progress.md). A finding on a stage this script
+landed -- see the development log). A finding on a stage this script
 hasn't certified either way isn't scored as a false positive OR a true
 positive; it's simply out of scope for that fixture, which is the
 correct, conservative reading -- claiming a fixture "proves" a stage is

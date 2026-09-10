@@ -232,9 +232,9 @@ site. Every finding was spot-checked by hand for plausibility, not just
 before this evaluation number was final: a false positive (`REACH-001`
 flagging an ordinary `User-agent: *` page exclusion as if it were
 AI-specific discrimination) and a crash (a `Finding` constructed with
-zero artifacts when an entire crawl came back empty). Full accounting,
-including what was tried and reverted, in
-[`docs/progress.md`](../docs/progress.md)'s Day 9 entry.
+zero artifacts when an entire crawl came back empty). Full accounting, including what was tried
+and reverted, lives in this project's development log (kept in the source
+repository, outside this submitted marketplace).
 
 ## Relationship to prior research
 
@@ -387,38 +387,34 @@ The falsification pass has no equivalent in any paper or product found.
   annoyance.
 - **CI runs on Linux only.** No `windows-latest` in the matrix, so
   Windows-specific path and shell behaviour is untested. Two known
-  consequences are documented in `CLAUDE.md`: PowerShell's execution
-  policy blocks the `npx.ps1` shim used by `skills-ref` (use `npx.cmd` or
-  `cmd /c`), and the venv activate path differs.
+  consequences: PowerShell's default execution policy blocks the
+  `npx.ps1` shim used by `skills-ref` (run it as `npx.cmd --yes
+  skills-ref validate <dir>`, or via `cmd /c`), and the virtualenv
+  activate path is `.venv\Scripts\activate`, not `.venv/bin/activate`.
 
 ## Structure
 
 ```
-marketplace.json              one entrypoint: ai-visibility-orchestrator (the brief's convention)
-.claude-plugin/marketplace.json  the same manifest at the path real Claude Code tooling looks for
+marketplace.json              one entrypoint: ai-visibility-orchestrator
 LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
 scripts/eval_fixtures.py        maintainer eval harness -- not a shipped skill
 tests/                          236 tests + local fixture sites (no live network needed)
-docs/build-plan.md              the full 10-day plan this was built against
-docs/progress.md                the honest day-by-day accounting, including every bug found and fixed
 ```
 
 See `skills/ai-visibility-orchestrator/SKILL.md` for the full CLI and
 the composition contract in more detail; every skill's own `SKILL.md`
 documents its detectors, input/output contract, and current status.
 
-**A note on the manifest, stated openly.** The build plan this was
-written against specifies `marketplace.json` at the package root with a
-`metadata.entrypoint` key ("exactly one entrypoint"). The *published
-Claude Code plugin-marketplace spec* instead expects
-`.claude-plugin/marketplace.json`, and its `metadata` object is
-`additionalProperties: false` — so `entrypoint` there would be rejected
-by a strict validator. Since the original brief was never available to
-verify which convention the grader applies, this ships **both**: the
-root manifest exactly as the build plan specifies, and a strictly
-schema-conforming copy at the official path.
-`scripts/lint_marketplace.py` validates each against its own rules *and*
-enforces that they never drift apart (verified with a negative test —
-reintroducing `entrypoint` into the official copy fails the lint).
+**A note on the manifest.** The handout is explicit that the multi-skill
+marketplace format is the contest's own convention, not an external
+standard: agentskills.io defines the single-skill `SKILL.md` format and
+nothing above it. So `marketplace.json` is the handout's example shape
+verbatim — `name`, `version`, and a `skills` array of
+`{id, path, entrypoint}` — with exactly one skill carrying
+`entrypoint: true`. `skills/ai-visibility-orchestrator/scripts/lint_marketplace.py`
+enforces that shape in CI: every listed path resolves inside the
+marketplace root and contains a `SKILL.md`, no skill folder on disk is
+missing from the manifest, exactly one entrypoint, and no key the
+handout's manifest doesn't define.

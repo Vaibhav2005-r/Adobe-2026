@@ -111,7 +111,7 @@ def test_critical_finding_from_a_genuinely_single_page_corpus_is_not_demoted():
     # The real bug this regression-tests: a site whose *entire* known
     # corpus is 1 page checking "all of it" is a complete sample, not
     # an inadequate one -- caught live on tests/fixtures/js-only-price
-    # during Day 8 development (see docs/progress.md).
+    # during Day 8 development (see the development log).
     finding = _finding(stage=Stage.RENDER, severity=Severity.CRITICAL, checked=1, url="https://example.com/")
     fresh_records = {"https://example.com/": _record("https://example.com/")}
     updated, demote = vf.verify_finding(finding, fresh_records, {}, total_pages_available=1)

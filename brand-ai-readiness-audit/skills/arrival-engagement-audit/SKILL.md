@@ -1,6 +1,8 @@
 ---
 name: arrival-engagement-audit
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 6 ARRIVE, the mid-task arrival model -- audits the pages most likely to be cited against an AI-referred visitor persona (deep-linked, mid-task, zero context) for answer proximity, orientation, context reset, entry interference, next-step availability, AI-referral instrumentation, and scoped response latency.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: arrive
@@ -15,7 +17,21 @@ question already formed, already given a partial answer by the
 assistant, with zero context about who the brand is. If a finding would
 be identical for a Google visitor, it doesn't belong here.
 
-## Detects
+## When to use
+
+Not directly. This skill is an internal pipeline stage of the
+`brand-ai-readiness-audit` marketplace, owning stage ⑥ ARRIVE -- *does the
+AI-referred visitor stay?*
+`ai-visibility-orchestrator` is the marketplace's single entrypoint and
+drives this stage as one step of its own procedure, handing it the corpus
+that survived the stages before it. Invoking it on its own gives you one
+stage's `StageResult`, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 - **`ENGAGE-001`** Answer proximity: is the answer the assistant would
   have cited present in the top half of the page's own main content?
@@ -57,7 +73,7 @@ deep-link arrival -- `ENGAGE-003` is that detector, built and tested,
 though not yet observed re-triggering the specific `REACH-002` case on
 a live re-check.
 
-## Input / output contract
+## Inputs
 
 Reads the `citable=True` pages from stage ④'s own answerability_matrix
 -- the pages that actually won a buyer-intent query, not a re-derived
@@ -68,7 +84,11 @@ survivor set if nothing won a query, so a tiny fixture or an
 all-UNRETRIEVABLE corpus still gets an arrival/engagement check rather
 than none. `ENGAGE-006` (instrumentation) checks the full stage ①
 survivor set regardless, since analytics snippets are typically
-injected site-wide. Writes a `StageResult` with `stage: arrive`; gated
+injected site-wide.
+
+## Output
+
+Writes a `StageResult` with `stage: arrive`; gated
 in `run_audit.py` on stage ④ having actually run (not just on budget),
 since it reads stage ④'s own output directly.
 
@@ -83,7 +103,7 @@ consent overlays -- every detector confirmed silent on it, and the
 stage confirmed byte-identical across two runs. `ENGAGE-002`,
 `ENGAGE-004`, `ENGAGE-005`, and `ENGAGE-006` confirmed firing on real
 sites (not just fixtures) during the Day 7 wild-corpus sweep; see
-`docs/progress.md` for the full accounting, including a real
+the development log records the full accounting, including a real
 entity-detection bug (Day 5-era code, in `retrieval-simulation`, not
 this skill) that this stage's own findings surfaced and that was fixed
 the same day.

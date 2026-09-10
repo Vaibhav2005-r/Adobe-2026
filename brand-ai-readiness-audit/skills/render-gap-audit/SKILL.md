@@ -1,6 +1,8 @@
 ---
 name: render-gap-audit
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 2 RENDER -- the dual-fetch differential -- fetching each page twice (plain HTTP GET vs. headless-rendered) and diffing at the fact level to find content that only exists after JavaScript execution.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: render
@@ -13,7 +15,21 @@ audit -- major AI crawlers are documented as executing JavaScript
 inconsistently or not at all, so a page that passes every SEO check can
 still be blank to an AI fetcher.
 
-## Detects
+## When to use
+
+Not directly. This skill is an internal pipeline stage of the
+`brand-ai-readiness-audit` marketplace, owning stage ② RENDER -- *can it be
+read without JavaScript?*
+`ai-visibility-orchestrator` is the marketplace's single entrypoint and
+drives this stage as one step of its own procedure, handing it the corpus
+that survived the stages before it. Invoking it on its own gives you one
+stage's `StageResult`, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 - Fact-level (not character-level) delta between a plain HTTP GET and a
   headless-Chromium render of the same URL, classified by fact type
@@ -31,11 +47,15 @@ examples (a JS-only docs generator, a DeFi trading app shell) including the
 citation consequence: the render gap didn't just hide content, it handed
 the citation to a different domain entirely.
 
-## Input / output contract
+## Inputs
 
 Reads `corpus_delta` from `crawl-reach-audit` (only pages that survived
 stage ① are dual-fetched -- this is the composition gating in
-`references/composition.md`). Writes a `StageResult` with `stage:
+`references/composition.md`).
+
+## Output
+
+Writes a `StageResult` with `stage:
 render`; `corpus_delta` passes through only the facts confirmed present
 in the non-JS fetch.
 

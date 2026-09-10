@@ -86,7 +86,7 @@ def test_unrecognized_type_not_flagged():
 # (see extract_detect._main_content_html), not the raw page -- confirmed
 # necessary against real sites (docs.python.org's sidebar nav widgets
 # false-positived a "heading skip" when the whole page was scanned; see
-# docs/progress.md). trafilatura's own boilerplate-detection heuristics
+# the development log). trafilatura's own boilerplate-detection heuristics
 # reject bare, minimal HTML snippets as "not real content" and discard
 # them entirely, so unit tests need a realistic page shell (nav/main/
 # footer, substantial paragraph text) for the *positive* (should-flag)

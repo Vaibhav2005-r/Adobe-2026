@@ -1,6 +1,8 @@
 ---
 name: extractability-audit
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 3 EXTRACT -- can a fact be isolated from the page -- via structured-data parsing and validation, schema-vs-visible-text contradiction detection, semantic HTML integrity, and facts-locked-in-images detection.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: extract
@@ -12,7 +14,21 @@ Answers: **can it isolate the fact?** A page can be fully reachable and
 fully rendered and still fail here if the fact isn't structured in a way
 an extractor can pull out cleanly.
 
-## Detects
+## When to use
+
+Not directly. This skill is an internal pipeline stage of the
+`brand-ai-readiness-audit` marketplace, owning stage ③ EXTRACT -- *can a
+specific fact be isolated from the page?*
+`ai-visibility-orchestrator` is the marketplace's single entrypoint and
+drives this stage as one step of its own procedure, handing it the corpus
+that survived the stages before it. Invoking it on its own gives you one
+stage's `StageResult`, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 - **`EXTRACT-001`** Schema-vs-visible-text contradiction: JSON-LD claims
   one price, the page's visible text shows another. Both sides are
@@ -33,7 +49,7 @@ Not yet implemented: microdata/RDFa contradiction checks (JSON-LD only
 for now -- `extruct` parses all three, but the contradiction/
 required-property detectors only walk the `json-ld` result), table/`<dl>`
 structure checks, and canvas/PDF fact detection (image-filename heuristic
-only). See `docs/progress.md` for the honest accounting.
+only). The development log records the honest accounting.
 
 Field research already recorded a **positive control** reused as this
 stage's regression check: a Shopify product page whose complete
@@ -43,7 +59,7 @@ is present in the raw non-JS HTML -- see the Controls section of
 `tests/fixtures/schema-clean-product/` for the synthetic version used in
 CI.
 
-## Input / output contract
+## Inputs
 
 Reads `corpus_delta` from `crawl-reach-audit` (the raw HTML of every
 stage-① survivor) directly, not gated through `render-gap-audit`'s
@@ -51,7 +67,11 @@ stage-① survivor) directly, not gated through `render-gap-audit`'s
 otherwise JS-heavy sites, and a page `render-gap-audit` already flagged
 as an empty shell simply has nothing for these checks to find either
 way -- harmless, not a false negative, since `RENDER-001` already
-reported the more fundamental problem for that page. Writes a
+reported the more fundamental problem for that page.
+
+## Output
+
+Writes a
 `StageResult` with `stage: extract`.
 
 ## Status

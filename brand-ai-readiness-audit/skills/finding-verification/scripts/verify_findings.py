@@ -1,6 +1,6 @@
 """Cross-cutting falsification pass (finding-verification): runs after
 every detection stage, across all their findings, and tries to disprove
-each one before it ships. Per docs/build-plan.md Part 2 (4), the
+each one before it ships. Per the project's build plan, Part 2 (4), the
 "anti-false-positive weapon" -- the rubric explicitly rewards "few false
 positives," so this is the dedicated mechanism that earns it, not a
 hope that the per-stage detectors are already careful enough.

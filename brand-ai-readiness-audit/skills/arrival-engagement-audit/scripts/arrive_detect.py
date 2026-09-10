@@ -424,7 +424,7 @@ def detect_no_ai_referral_instrumentation(pages: dict[str, str]) -> Finding | No
         # forcing one here would either crash (confirmed live:
         # zalando.de returned zero REACH-stage fetches, so ARRIVE's
         # `all_pages` was empty and this line raised a pydantic
-        # ValidationError -- see docs/progress.md Day 9) or fabricate
+        # ValidationError -- see the development log, Day 9) or fabricate
         # an artifact that doesn't back the claim. Same guard
         # retrieve_detect.run_retrieval_simulation already established
         # for the identical empty-corpus case on Day 5; this detector

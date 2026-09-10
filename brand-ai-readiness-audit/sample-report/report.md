@@ -2,7 +2,7 @@
 
 **7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus**
 
-Audited 2026-09-10 16:53:16.561804+00:00 · 12 pages crawled, 0 rendered · 27.0s
+Audited 2026-09-10 17:02:11.782174+00:00 · 12 pages crawled, 0 rendered · 28.3s
 
 ## Funnel status
 

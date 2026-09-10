@@ -1,6 +1,8 @@
 ---
 name: retrieval-simulation
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 4 RETRIEVE, the crown-jewel answerability probe -- chunks the AI-reachable corpus, indexes it with hand-rolled BM25, expands a deterministic buyer-intent query set, and classifies each query as answerable, partial, ungrounded, or unretrievable. Also runs orphan-fact and chunk-boundary analysis.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: retrieve
@@ -12,7 +14,21 @@ Answers: **can a machine answer the questions a buyer would ask, using
 only what it can actually reach and read?** Not "does this page have
 good content" -- an outcome-anchored, reproducible probe.
 
-## Pipeline
+## When to use
+
+Not directly. This skill is an internal pipeline stage of the
+`brand-ai-readiness-audit` marketplace, owning stage ④ RETRIEVE -- *does the
+chunk carrying the fact survive retrieval?*
+`ai-visibility-orchestrator` is the marketplace's single entrypoint and
+drives this stage as one step of its own procedure, handing it the corpus
+that survived the stages before it. Invoking it on its own gives you one
+stage's `StageResult`, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 1. Derive the brand's entity + category from the site itself: JSON-LD
    `Organization` first, then the homepage's own `<title>`/`<h1>`, then
@@ -28,7 +44,7 @@ good content" -- an outcome-anchored, reproducible probe.
    back to URL + DOM position.
 4. Retrieve with hand-rolled BM25 (deterministic, zero model weights, no
    API key -- see `pyproject.toml` and the stack rationale in
-   `docs/build-plan.md` Part 4). A pluggable `Retriever` interface
+   the project's build plan, Part 4). A pluggable `Retriever` interface
    leaves room for an embedding backend if an API key is ever present.
 5. Classify each query: `ANSWERABLE` / `PARTIAL` / `UNGROUNDED` /
    `UNRETRIEVABLE`.
@@ -47,7 +63,7 @@ see `TRUST-001` in `references/taxonomy.md` at the orchestrator.
 Whether that shows up as an `UNGROUNDED`/`UNRETRIEVABLE` outcome here or
 is purely a stage ⑤ CITE phenomenon is still an open question.
 
-## Input / output contract
+## Inputs
 
 Consumes the stage ① REACH survivors, minus any page stage ② RENDER
 proved is an empty JS-only shell (a `RENDER-001` finding at `critical`
@@ -56,6 +72,9 @@ that's bounded by `--max-render-pages` for performance and a page RENDER
 never got to check isn't the same as one it proved empty; see
 `ai-visibility-orchestrator/scripts/run_audit.py::run_retrieve_stage`
 for the exact logic and `references/composition.md` for the reasoning.
+
+## Output
+
 Writes a `StageResult` with `stage: retrieve`, a single aggregate
 `CHUNK-001` finding when >=25% of the 18 queries are unanswerable (never
 one finding per query), and the full `answerability_matrix` passed
@@ -105,7 +124,7 @@ page's title/h1 when the homepage itself wasn't in the crawl sample
 hijackable by an unrelated page (a real allbirds.com crawl sample never
 included its own homepage and instead named the site "Design System"
 after a legitimate but unrelated page's `<title>`); replaced with a
-domain-derived name as the floor. See `docs/progress.md` for the full
+domain-derived name as the floor. The development log records the full
 accounting, including a cluster of real bugs this stage's build
 surfaced and fixed -- several in code that had already shipped on
 earlier days.

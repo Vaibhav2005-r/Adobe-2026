@@ -1,6 +1,8 @@
 ---
 name: finding-verification
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Cross-cutting falsification pass that runs after all detection stages and tries to disprove every finding before it ships -- re-fetch, reproducibility check, contradiction search, sample-adequacy check, confidence assignment, and demotion to observations for anything that fails.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: verify
@@ -12,7 +14,20 @@ Runs after every other stage, across all their findings. The rubric
 rewards "few false positives" -- this is the dedicated skill that earns
 that, not a hope that the detectors are already careful enough.
 
-## Checks, per finding
+## When to use
+
+Not directly. This skill is the marketplace's cross-cutting
+falsification pass, answering *is each finding actually true?*
+`ai-visibility-orchestrator` is the single entrypoint and drives this
+step after all six detection stages have run, handing it their combined
+findings list rather than a page corpus. Invoking it on its own gives
+you a verified findings list, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 - **Reproduction / artifact liveness.** Re-fetch the finding's primary
   artifact URL with a *different* UA (`GPTBot`) than stage ① used --
@@ -57,10 +72,13 @@ plan's other re-fetch bullet). That would need a per-taxonomy_id
 dispatch table re-running each detector's own logic, which this skill
 deliberately doesn't build -- see Status.
 
-## Input / output contract
+## Inputs
 
 Reads the flat list of findings collected across stages ①-⑥ (assembled
 by `run_audit.py`'s `main_async`, after all six stages have run).
+
+## Output
+
 Writes back `(surviving_findings, demoted_findings)` -- the
 orchestrator passes both into `assemble_report.py`, which merges
 surviving findings across stages (`dedup_findings`, e.g. collapsing
@@ -78,4 +96,4 @@ contradiction check. Confirmed running for real against live sites
 during Day 8 development (allbirds.com, docs.python.org): every finding
 came back `reproduced: true` with no demotions needed on those runs, and
 a real demotion was independently confirmed against a synthetic
-single-page fixture case (see `docs/progress.md`).
+single-page fixture case (recorded in the development log).

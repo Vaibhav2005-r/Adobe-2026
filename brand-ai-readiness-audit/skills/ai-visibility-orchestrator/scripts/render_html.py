@@ -1,4 +1,4 @@
-"""Single-file HTML report -- the demo surface (docs/build-plan.md Part
+"""Single-file HTML report -- the demo surface (the project's build plan, Part
 2 (8), Day 8 DoD). Funnel diagram with the failing stage highlighted,
 findings grouped by stage, the answerability matrix, and a prioritized
 action list, all in one self-contained HTML file: inline CSS, no

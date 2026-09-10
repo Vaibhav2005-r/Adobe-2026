@@ -61,7 +61,7 @@ def _extract_segments(main_html: str) -> list[tuple[str, str | None]]:
     selector in selectolax returns all matches of the first selector in
     the group, then all matches of the second, and so on -- concatenated
     per-selector, not merged into document order. Confirmed directly
-    (see docs/progress.md): `tree.css("h1, h2, h3, p")` on
+    (recorded in the development log): `tree.css("h1, h2, h3, p")` on
     `<h2>B</h2><h1>A</h1><p>x</p><h3>C</h3>` returns `h1 A, h2 B, h3 C,
     p x` -- reordered by tag, not the true `h2 B, h1 A, p x, h3 C`. For
     a per-segment heading-attribution walk like this one, that's a

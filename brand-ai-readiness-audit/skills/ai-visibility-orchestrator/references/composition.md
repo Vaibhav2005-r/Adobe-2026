@@ -144,5 +144,5 @@ finding" rule would otherwise have to be bent to accommodate them.
 final report assembly (`scripts/assemble_report.py`), which also emits
 the single-file HTML report (`scripts/render_html.py`) and the Markdown
 executive summary (`scripts/render_markdown.py`) from the same
-validated `AuditReport`. See `docs/progress.md` at the repo root for
+validated `AuditReport`. See this project's development log for
 what's implemented vs. planned.

@@ -13,7 +13,7 @@ over a local http.server, matching how a judge running this offline
 would still get a real report on their own bare machine.
 
 Whether stage (2) RENDER actually runs depends on whether playwright is
-installed (it's an optional dependency, per docs/build-plan.md Part 4) --
+installed (it's an optional dependency, per the project's build plan, Part 4) --
 this test asserts the *correct* behavior for whichever case is true
 rather than assuming one, so it passes in both the full-dependency and
 bare-machine configurations.

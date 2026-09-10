@@ -1,5 +1,5 @@
 {
-  "_comment": "6 intent classes x 3 templates = 18 queries per audit, matching docs/build-plan.md Part 5's own report-schema example ('5 of 18 buyer-intent queries are UNANSWERABLE'). {brand} and {category} are filled in deterministically from the detected entity (see retrieve_detect.detect_entity) -- never free-form LLM generation, so the query set is reproducible.",
+  "_comment": "6 intent classes x 3 templates = 18 queries per audit, matching the project's build plan (Part 5) report-schema example ('5 of 18 buyer-intent queries are UNANSWERABLE'). {brand} and {category} are filled in deterministically from the detected entity (see retrieve_detect.detect_entity) -- never free-form LLM generation, so the query set is reproducible.",
   "identity": [
     "What is {brand}?",
     "What does {brand} do?",

@@ -5,7 +5,7 @@ deterministic query set from the bundled template bank -> chunk +
 BM25-index the AI-reachable corpus -> classify each query's outcome.
 
 Entirely deterministic -- no LLM call, no embeddings, no network beyond
-what stage (1) already fetched. See docs/build-plan.md Part 4: BM25 is
+what stage (1) already fetched. See the project's build plan, Part 4: BM25 is
 the "conservative floor," defensible specifically because it needs no
 model weights and no API key.
 """
@@ -412,7 +412,7 @@ def detect_cross_page_join_reliance(
 ) -> Finding | None:
     """CHUNK-003: a PARTIAL answer that required combining chunks from
     *different* pages, not just different sections of one page. Real
-    assistants rarely perform this join at all -- see docs/build-plan.md
+    assistants rarely perform this join at all -- see the project's build plan
     Part 2 (3)."""
     cross_page_entries = [e for e, cp in matrix_with_cross_page if cp]
     if not cross_page_entries:

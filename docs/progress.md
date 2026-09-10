@@ -610,3 +610,103 @@ separate. That property belongs to `_dedup_exact` and is unchanged —
 the test now calls it directly. Asserting it through the wrapper was
 asserting the *absence* of a feature that has since been added on
 purpose, so leaving it green would have meant not shipping the fix.
+
+---
+
+### Post-Day-10 addendum 6 — the actual handout arrived, and the manifest was wrong
+
+The Round 3 handout PDF (`round3-handout-updated`) became available for
+the first time. Every prior session had worked from `docs/build-plan.md`'s
+summary of it, and addendum 1 had explicitly flagged the manifest format
+as an unresolved assumption. Reading the real document settled it — and
+the guess had been wrong in both directions.
+
+**The manifest did not match the handout, and neither copy did.** The
+handout is unambiguous that the marketplace format is the contest's own:
+
+> agentskills.io defines the single-skill SKILL.md format but does not
+> define a multi-skill marketplace format — the manifest below is this
+> contest's own lightweight convention.
+
+and then gives it verbatim: `name`, `version`, and a `skills` array of
+`{id, path, entrypoint}` objects with exactly one carrying
+`entrypoint: true`. What shipped was neither that nor a superset of it —
+it was the *Claude Code plugin* schema (`owner`, `metadata`, a `plugins`
+array with `source`/`strict`), which has no `skills[].entrypoint` field
+anywhere. A grader checking "the marketplace manifest is well-formed with
+exactly one entrypoint" against their own stated convention would not
+have found an entrypoint at all.
+
+Rewritten to the handout's exact shape. `.claude-plugin/marketplace.json`
+— the second copy added in addendum 1 as a hedge against not knowing
+which convention applied — is **deleted**: the handout resolves the
+question, so the hedge is now just a second manifest in a format the
+contest doesn't use, and it carried an external `$schema` URL against a
+rule that the manifest "should be self-contained — no external service
+needed to resolve it." `lint_marketplace.py` was rewritten from
+"validate two manifests and their anti-drift invariant" to "validate the
+handout's convention", with each check traceable to a line in the
+handout.
+
+*The lesson, recorded because it generalizes:* addendum 1 spent real
+effort building a careful, well-tested hedge against an unknown, and
+documented it honestly as a hedge. That was the right call given what was
+knowable. But a hedge is not evidence, and the moment the source document
+appeared, the hedge became debt to delete rather than an asset to
+preserve. Shipping both conventions felt like risk reduction; it was
+actually a 50% chance of shipping the wrong one plus a maintenance
+invariant to keep them in sync.
+
+**Other gaps the handout closed:**
+
+- **`license` was on one skill of eight.** The handout's `SKILL.md`
+  template carries `license: <your choice>`, and there is a `LICENSE`
+  file at the root. Now on all eight.
+- **`allowed-tools` was on none.** "Declare any allowed-tools" is an
+  explicit instruction. Now declared per skill (`Bash, Read` for the
+  stages; `Bash, Read, Write` for the entrypoint, which writes the three
+  report files). Confirmed `skills-ref` accepts both keys before rolling
+  them out.
+- **`SKILL.md` section structure didn't follow the handout's template.**
+  It prescribes `When to use` / `Inputs` / `Procedure` / `Output`. The
+  files used `Detects` / `Input / output contract` / `Status`, which
+  covered the same ground under different names. All eight now carry the
+  handout's four sections, with the existing substance folded under them
+  rather than rewritten — the combined `Input / output contract` section
+  split at its own "Writes a `StageResult`" sentence, which every stage
+  already had.
+- **Dangling references in the shipped artifact.** Roughly two dozen
+  comments and docs pointed at `docs/build-plan.md` and
+  `docs/progress.md`, which live at the *repository* root — outside the
+  marketplace root, and therefore not in the submitted zip. In a grader's
+  unzipped copy every one of those was a broken pointer. The provenance
+  prose is kept (it is evidence for the detection-accuracy rubric line);
+  only the dangling file paths are gone. Same for a README pointer to
+  `CLAUDE.md`, whose two Windows notes are now inlined where they were
+  referenced.
+- **Version drift.** `marketplace.json`, `pyproject.toml` and
+  `assemble_report.MARKETPLACE_VERSION` now all read `1.0.0`, and the
+  committed sample report was regenerated so its `run_manifest` says so.
+
+**Checked against the handout and deliberately kept:** the report schema
+extensions (the handout calls its schema "a floor, not a ceiling — you
+may add fields", and every required field is present — verified field by
+field against a real report); `tests/` and `scripts/eval_fixtures.py`
+(evidence for the "deterministic" and "few false positives" rubric
+lines); and `sample-report/`. That last one is worth noting honestly: the
+handout says "We evaluate the submitted marketplace itself — its skills'
+instructions, checks, logic, and how they're composed by the entrypoint —
+not any single report it happens to produce." A sample report is
+therefore not itself graded. It stays because it makes the output-design
+criterion inspectable in ten seconds, but it is a convenience, not a
+deliverable.
+
+Validation: 236 tests in the dev environment; manifest lint clean against
+the new rules; no schema drift; all 8 skills valid via `skills-ref`. Then
+the real check — built the submission zip (272 KB, well under the 50 MB
+cap), extracted it into a directory that never touched the dev `.venv`,
+installed it into a brand-new virtualenv, and from that copy alone: lint
+passed, all 8 skills validated, `run_audit.py` produced a valid report in
+3.8s, and the suite ran **230 passed, 1 skipped** (the Playwright module,
+correctly skipped on a bare machine). Nothing in the submitted artifact
+depends on anything outside it.

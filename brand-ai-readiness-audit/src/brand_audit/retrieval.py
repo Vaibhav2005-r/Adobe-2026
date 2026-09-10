@@ -8,7 +8,7 @@ network access or a key). BM25 is the lexical half of every production
 hybrid retriever, fully reproducible, and defensible as a conservative
 floor. The `Retriever` protocol exists so an embedding backend could be
 plugged in later if an API key happens to be present -- see
-docs/build-plan.md Part 4.
+the project's build plan, Part 4.
 """
 
 from __future__ import annotations

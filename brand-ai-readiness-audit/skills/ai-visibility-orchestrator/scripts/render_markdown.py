@@ -1,4 +1,4 @@
-"""Markdown executive summary (docs/build-plan.md Part 3 / Day 8 DoD).
+"""Markdown executive summary (the project's build plan, Part 3 / Day 8 DoD).
 Deliberately terser than the HTML report: a non-expert reads this one
 top to bottom in under a minute -- headline, funnel status, findings by
 stage (title + one-line evidence, not the full artifact dump), and the

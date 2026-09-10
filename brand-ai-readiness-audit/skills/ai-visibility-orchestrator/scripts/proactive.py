@@ -1,4 +1,4 @@
-"""The beyond-defect proactive layer (docs/build-plan.md Part 2 §8).
+"""The beyond-defect proactive layer (the project's build plan, Part 2 §8).
 
 The rubric rewards suggestions "even where no explicit defect was
 found," and calls out "relevant and non-obvious." That is a different

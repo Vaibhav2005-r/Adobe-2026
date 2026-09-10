@@ -2,7 +2,7 @@
 
 Each function takes already-fetched HTML (no network calls of its own)
 and returns `Finding`s. Deliberately does NOT do a live name-collision
-web search: docs/build-plan.md Part 8's own cut list names this the
+web search: the project's build plan (Part 8) cut list names this the
 first thing to cut if behind schedule ("Name-collision web probe (keep
 on-site entity anchoring)"), and a live search is also a real tension
 with the project's determinism/portability constraints -- results

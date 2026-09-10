@@ -1,6 +1,6 @@
 [project]
 name = "brand-ai-readiness-audit"
-version = "0.1.0"
+version = "1.0.0"
 description = "Simulates the AI-assistant retrieval pipeline (reach -> render -> extract -> retrieve -> cite -> arrive) and reports the exact stage where a brand falls out."
 requires-python = ">=3.11"
 license = { text = "MIT" }

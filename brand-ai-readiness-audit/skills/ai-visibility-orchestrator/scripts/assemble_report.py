@@ -38,7 +38,7 @@ from brand_audit.models import (  # noqa: E402
     Summary,
 )
 
-MARKETPLACE_VERSION = "0.1.0"
+MARKETPLACE_VERSION = "1.0.0"  # keep in sync with marketplace.json's "version"
 RULE_PACK_VERSION = "2026.08.28"  # bump when references/taxonomy.md gains/loses entries
 
 # Every stage's readiness defaults to "skipped" until that stage actually

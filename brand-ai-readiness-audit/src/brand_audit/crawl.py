@@ -19,7 +19,7 @@ from xml.etree import ElementTree
 import httpx
 from protego import Protego
 
-# Documented AI-crawler UAs, per docs/build-plan.md Part 4. Kept as a flat
+# Documented AI-crawler UAs, per the project's build plan, Part 4. Kept as a flat
 # list (not per-vendor) because REACH-001-style detection needs the exact
 # name a robots.txt author would have written.
 AI_USER_AGENTS = [
@@ -57,7 +57,7 @@ DEFAULT_FETCH_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthrop
 
 # A second, distinct AI-crawler UA -- used only by finding-verification's
 # re-fetch check ("re-fetch and re-test with a different UA... does it
-# reproduce?", per docs/build-plan.md Part 2 (4)). Deliberately a
+# reproduce?", per the project's build plan, Part 2 (4)). Deliberately a
 # *different* named bot from DEFAULT_FETCH_UA, not a generic browser
 # string: the point is to catch a UA-conditional response (a WAF or
 # origin server treating one AI crawler differently from another), which
@@ -244,7 +244,7 @@ def find_homepage_url(urls, hint_url: str | None = None) -> str | None:
     real crawled URL, which always carries whatever path/trailing-slash
     the sitemap or crawl happened to produce ("https://example.com/").
     Confirmed against a real site (docs.python.org) before this helper
-    existed as a shared function -- see docs/progress.md Day 5. Kept
+    existed as a shared function -- see the development log, Day 5. Kept
     here, not duplicated a third time, once trust-corroboration-audit
     needed the same lookup for its own homepage-scoped checks (Day 6).
 
@@ -290,7 +290,7 @@ def stratified_sample(urls: list[str], seed: str, max_pages: int = 40) -> list[s
 
 class BudgetManager:
     """Hard watchdog for the <5-minute runtime constraint. Degradations are
-    recorded, never silent -- see docs/build-plan.md Part 4 ("Runtime
+    recorded, never silent -- see the project's build plan, Part 4 ("Runtime
     budget") and Part 8 (degradation ladder)."""
 
     # Order matters: first to go under pressure, per the build plan's cut

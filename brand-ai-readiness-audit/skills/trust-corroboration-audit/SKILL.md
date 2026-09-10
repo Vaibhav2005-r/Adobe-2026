@@ -1,6 +1,8 @@
 ---
 name: trust-corroboration-audit
 description: Internal pipeline stage of the Brand AI Readiness Audit, invoked by ai-visibility-orchestrator. Not meant to be invoked directly. Owns stage 5 CITE -- is it quotable and trusted -- via on-site entity-anchoring (sameAs) checks, freshness/staleness of dateModified, description-drift checks across meta/JSON-LD/OpenGraph, and attribution/statistic-density scoring. Deliberately does not run a live name-collision web search -- see Detects below for why.
+license: MIT
+allowed-tools: Bash, Read
 metadata:
   role: stage
   stage: cite
@@ -12,7 +14,21 @@ Answers: **is it quotable and trusted?** A fact can be reachable,
 rendered, extractable and still lose the citation to a better-framed
 third party, or fail to converge on one canonical identity at all.
 
-## Detects
+## When to use
+
+Not directly. This skill is an internal pipeline stage of the
+`brand-ai-readiness-audit` marketplace, owning stage ⑤ CITE -- *is the fact
+quotable and trusted?*
+`ai-visibility-orchestrator` is the marketplace's single entrypoint and
+drives this stage as one step of its own procedure, handing it the corpus
+that survived the stages before it. Invoking it on its own gives you one
+stage's `StageResult`, not an audit report.
+
+Read-only and recommend-only, like every skill here: it fetches and reads,
+and never writes to, authenticates against, or otherwise alters the audited
+site.
+
+## Procedure
 
 - **`TRUST-005`** Entity anchoring: a named `Organization`/`LocalBusiness`
   JSON-LD node with no (or empty) `sameAs` array linking to an
@@ -48,12 +64,16 @@ query-language / content-language mismatch ceding citation to
 translated third-party summaries (`TRUST-003`). See
 `references/taxonomy.md` at the orchestrator.
 
-## Input / output contract
+## Inputs
 
 Reads the stage ① REACH survivors directly (like `extractability-audit`,
 not gated through RENDER or RETRIEVE): JSON-LD and meta tags live in
 `<head>` and are overwhelmingly server-rendered even on JS-heavy sites,
-and this stage needs raw pages, not chunked/indexed content. Writes a
+and this stage needs raw pages, not chunked/indexed content.
+
+## Output
+
+Writes a
 `StageResult` with `stage: cite`.
 
 ## Status
@@ -65,4 +85,4 @@ unit-tested against both a defect case and a clean-control case
 `dateModified`, consistent descriptions, and an attributed statistic --
 every detector confirmed silent on it. `TRUST-005` and `TRUST-008`
 confirmed firing on real sites (not just fixtures) during the Day 6
-wild-corpus sweep. See `docs/progress.md` for the full accounting.
+wild-corpus sweep. The development log records the full accounting.

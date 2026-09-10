@@ -2,6 +2,7 @@
 name: ai-visibility-orchestrator
 description: Audits how visible a website is to AI assistants (ChatGPT, Claude, Perplexity, etc.) by simulating the retrieval pipeline they actually run -- reach, render, extract, retrieve, cite, arrive -- and reporting the exact stage where the brand falls out, with artifact-backed evidence for every finding. Use this when the user asks to audit a site's AI/LLM visibility, GEO/AEO readiness, or why a brand isn't being cited by AI assistants.
 license: MIT
+allowed-tools: Bash, Read, Write
 metadata:
   role: entrypoint
   stage: orchestrator
@@ -29,17 +30,62 @@ Every finding is stage-localized and artifact-backed (URL + HTTP status +
 selector/byte-offset + the literal extracted strings). No artifact, no
 finding.
 
-## Running an audit
+## When to use
+
+Use this skill when the user wants to know why a brand is missing,
+misrepresented, or ignored by AI assistants, or why visitors who arrive
+from one don't engage -- "audit this site's AI visibility", "why isn't
+ChatGPT citing us", "is our site AI-readable", "GEO/AEO audit". It is
+the only skill in this marketplace meant to be invoked directly.
+
+Do not use it to change anything. This marketplace is recommend-only:
+it fetches, reads, and reports. No skill in it writes to the audited
+site, authenticates, or performs any action beyond a polite,
+robots-respecting read.
+
+## Inputs
+
+A single website: a bare domain (`example.com`) or a full URL
+(`https://example.com`). Nothing else is required -- no API key, no
+credentials, no site access. Optional flags bound the run:
+`--max-pages N` (default 40), `--budget-s N` (default 300),
+`--skip-render` (skip stage ② when Playwright isn't installed), and
+`--out PATH`.
+
+## Procedure
 
 ```
 python scripts/run_audit.py <site> [--max-pages 40] [--out report.json]
 ```
 
-This crawls the site (robots-respecting, read-only), runs all six
-funnel-stage skills plus the cross-cutting falsification pass, and
-writes three files from the same validated `AuditReport` (see
-`assets/report_schema.json`): `report.json` (the schema-valid contract
--- the source of truth), `report.html` (single-file, self-contained --
+1. **Discover and sample.** Fetch `robots.txt`, discover the sitemap,
+   and take a deterministic stratified sample (fixed seed derived from
+   the domain, so the same site always yields the same page set).
+2. **Run the six funnel stages in order**, each gated on the corpus
+   that survived the ones before it: ① `crawl-reach-audit`,
+   ② `render-gap-audit`, ③ `extractability-audit`,
+   ④ `retrieval-simulation`, ⑤ `trust-corroboration-audit`,
+   ⑥ `arrival-engagement-audit`.
+3. **Falsify.** `finding-verification` runs across every stage's
+   findings and tries to disprove each one before it ships.
+4. **Merge.** Collapse same-root-cause findings across stages, and
+   collapse per-page findings of one defect into a single
+   corpus-scoped finding.
+5. **Derive proactive recommendations** from measured answerability
+   gaps -- the beyond-defect layer.
+6. **Assemble and validate** one `AuditReport`, then write it out.
+
+Every step is deterministic: the same site produces the same report,
+modulo `audited_at`.
+
+## Output
+
+Three files, all rendered from one validated `AuditReport` (see
+`assets/report_schema.json`): **`report.json`** (the schema-valid
+contract -- the source of truth, carrying `site`, `audited_at`, a
+counts-by-severity `summary`, and per finding an `id`, `title`,
+`severity`, `evidence` and `suggested_action`, plus this project's own
+extensions), `report.html` (single-file, self-contained --
 funnel diagram with the failing stage highlighted, findings grouped by
 stage, the answerability matrix, a prioritized action list -- the demo
 surface), and `report.md` (a shorter executive summary a non-expert
@@ -61,7 +107,7 @@ findings, since they describe what is absent rather than what is
 broken. A stage that never runs (budget exhausted, an
 optional dependency missing) reports `ai_readiness: skipped`, not
 `pass`, so the report never implies a check that didn't happen. See
-`docs/progress.md` at the repo root for the day-by-day accounting.
+this project's development log for the day-by-day accounting.
 
 ## Composition contract
 
