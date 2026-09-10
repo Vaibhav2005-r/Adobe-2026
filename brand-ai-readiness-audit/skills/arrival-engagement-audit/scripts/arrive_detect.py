@@ -310,11 +310,19 @@ def detect_entry_interference(pages: dict[str, str]) -> Finding | None:
             affected.append((url, hit))
     if not affected:
         return None
-    confidence = Confidence.MEDIUM
+    # LOW, not MEDIUM: this matches a vendor script name in the markup and
+    # nothing more. It cannot tell a full-screen modal from an unobtrusive
+    # footer bar, and consent SDKs ship on a very large share of
+    # EU-facing commercial sites that handle them perfectly well. Same
+    # honesty as TRUST-008 and ENGAGE-005, which use LOW for equivalently
+    # narrow signature/phrase matching. Confirming actual occlusion needs
+    # a rendered page with computed styles, which this stage deliberately
+    # does not require.
+    confidence = Confidence.LOW
     severity = compute_severity(Stage.ARRIVE, BlastRadius.DEGRADES, confidence)
     return Finding(
         id=_next_id(),
-        title=f"{len(affected)} of {len(pages)} citable page(s) carry a consent/gate overlay that can block first meaningful paint",
+        title=f"{len(affected)} of {len(pages)} citable page(s) carry a consent/gate overlay that may block first meaningful paint",
         severity=severity,
         stage=Stage.ARRIVE,
         taxonomy_id="ENGAGE-004",

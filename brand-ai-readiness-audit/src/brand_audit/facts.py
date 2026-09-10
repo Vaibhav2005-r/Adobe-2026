@@ -13,7 +13,19 @@ from __future__ import annotations
 import re
 from datetime import date
 
-_CURRENCY_RE = re.compile(r"[$€£₹]\s?\d[\d,]*(?:\.\d+)?")
+# Symbols, plus ISO 4217 alphabetic codes on either side of the number
+# ("EUR 20", "20 EUR", "20 USD"). Symbol-only matching missed every price
+# on a site that quotes in codes rather than glyphs, which is the norm for
+# B2B, cross-border and multi-currency pricing pages -- and a currency
+# fact this never extracts is one the render diff can never report as
+# missing from the non-JS fetch either.
+_CURRENCY_CODES = "USD|EUR|GBP|INR|CAD|AUD|NZD|CHF|JPY|CNY|SEK|NOK|DKK|SGD|HKD|ZAR|AED|BRL|MXN|PLN"
+_CURRENCY_RE = re.compile(
+    r"(?:[$€£₹¥]\s?\d[\d,]*(?:\.\d+)?"
+    rf"|(?:{_CURRENCY_CODES})\s?\d[\d,]*(?:\.\d+)?"
+    rf"|\d[\d,]*(?:\.\d+)?\s?(?:{_CURRENCY_CODES}))\b",
+    re.IGNORECASE,
+)
 _NUMERIC_RE = re.compile(r"\b\d{2,}(?:\.\d+)?%?\b")
 _DATE_RE = re.compile(
     r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|"
@@ -59,10 +71,14 @@ def extract_facts(text: str, *, today_iso: str | None = None) -> dict[str, set[s
     }
     if today_iso:
         facts["date"] -= today_variants(today_iso)  # suppress "generated at" timestamps, not content dates
-    # numeric facts that are substrings of an already-captured currency
-    # fact aren't a separate finding (e.g. "$49" also matching \d{2,})
+    # numeric facts that are part of an already-captured currency fact
+    # aren't a separate finding (e.g. "$49" also matching \d{2,}).
+    # Substring, not equality: a thousands-separated price like "₹3,999"
+    # normalizes to "3999", while `_NUMERIC_RE` independently matches the
+    # "999" after the comma -- equality left that fragment in the numeric
+    # set as a phantom fact.
     currency_digits = {re.sub(r"[^\d.]", "", c) for c in facts["currency"]}
-    facts["numeric"] = {n for n in facts["numeric"] if n not in currency_digits}
+    facts["numeric"] = {n for n in facts["numeric"] if not any(n in d for d in currency_digits)}
     return facts
 
 

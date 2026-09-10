@@ -243,3 +243,87 @@ def test_undeclared_language_keeps_the_english_lexicons_enabled():
 def test_declared_non_english_disables_the_english_lexicons():
     assert lexicons_cover("de") is False
     assert lexicons_cover("en") is True
+
+
+# --- no sitemap: seed the sampler from the homepage, not one page -----------
+
+
+class _NoSitemapHandler(http.server.BaseHTTPRequestHandler):
+    """robots.txt with no `Sitemap:` line, and /sitemap.xml 404s -- exactly
+    the shape python.org, react.dev, apache.org and mit.edu present."""
+
+    PAGES = {"/", "/about.html", "/docs.html", "/contact.html"}
+
+    def do_GET(self):  # noqa: N802 -- http.server's own naming
+        if self.path == "/robots.txt":
+            body = b"User-agent: *\nDisallow: /private/\n"
+        elif self.path in self.PAGES:
+            body = (
+                b'<html lang="en"><body><nav>'
+                b'<a href="/about.html">About</a><a href="/docs.html">Docs</a>'
+                b'<a href="/contact.html">Contact</a><a href="/private/secret.html">Private</a>'
+                b'<a href="https://elsewhere.example.com/x">Offsite</a>'
+                b'<a href="/about.html#team">Anchor dupe</a><a href="/about.html?utm=1">Query dupe</a>'
+                b"</nav><main><p>content</p></main></body></html>"
+            )
+        else:
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture(scope="module")
+def no_sitemap_server():
+    server = http.server.ThreadingHTTPServer(("localhost", 8136), _NoSitemapHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield "http://localhost:8136"
+    server.shutdown()
+
+
+def _discover_all(base: str):
+    async def run():
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            from brand_audit.crawl import fetch_robots
+
+            robots = await fetch_robots(client, base)
+            return await discover_sitemap_urls(client, base, robots)
+
+    return asyncio.run(run())
+
+
+def test_a_site_with_no_sitemap_is_seeded_from_its_homepage_links(no_sitemap_server):
+    # Without this fallback the whole audit ran against one page: every
+    # downstream stage reported on a single document. Measured on a
+    # 196-site sweep, 39 of 131 completed audits (30%) crawled exactly one
+    # page -- wikipedia.org, python.org, react.dev, rust-lang.org, mit.edu.
+    # None of them publish a sitemap; all 404 on /sitemap.xml.
+    urls, fetch_ok = _discover_all(no_sitemap_server)
+    assert fetch_ok is False, "there genuinely is no sitemap -- REACH-006 must still be able to say so"
+    assert len(urls) > 1, "a sitemap-less site must not collapse to a single-page audit"
+    assert f"{no_sitemap_server}/about.html" in urls
+    assert f"{no_sitemap_server}/docs.html" in urls
+
+
+def test_homepage_link_discovery_respects_robots_and_stays_on_host(no_sitemap_server):
+    urls, _ = _discover_all(no_sitemap_server)
+    assert not any("/private/" in u for u in urls), "robots.txt Disallow must be honoured"
+    assert not any("elsewhere.example.com" in u for u in urls), "off-host links must not be crawled"
+
+
+def test_homepage_link_discovery_collapses_fragment_and_query_duplicates(no_sitemap_server):
+    urls, _ = _discover_all(no_sitemap_server)
+    about = [u for u in urls if u.rstrip("/").endswith("about.html")]
+    assert len(about) == 1, f"the same page reached three ways must occupy one slot, got {about}"
+
+
+def test_homepage_link_discovery_is_deterministic(no_sitemap_server):
+    assert _discover_all(no_sitemap_server)[0] == _discover_all(no_sitemap_server)[0]

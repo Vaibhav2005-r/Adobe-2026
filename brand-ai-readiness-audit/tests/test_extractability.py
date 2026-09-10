@@ -275,3 +275,36 @@ def test_descending_back_up_the_outline_is_not_a_skip():
 
 def test_every_skip_on_the_page_is_reported_not_just_the_first():
     assert _skip_count([1, 3, 2, 5]) == 2
+
+
+def test_no_h1_is_not_reported_when_the_document_has_one_outside_main_content():
+    # python.org ships five <h1> elements in a hero carousel; trafilatura
+    # strips the carousel as boilerplate, so main-content extraction sees
+    # zero and this rule reported "no <h1> found" on one of the most
+    # visited technical sites on the web. "This page has no h1" is a claim
+    # about the document, and trafilatura is not the authority on it.
+    html = (
+        "<html><body><header><h1>Brand headline in a hero banner</h1></header>"
+        "<main><h2>Section</h2><p>" + "word " * 80 + "</p></main></body></html>"
+    )
+    findings = extract_detect.detect_heading_hierarchy_issues("https://example.com/", html)
+    assert not any("no <h1> found" in f.evidence for f in findings)
+
+
+def test_no_h1_is_still_reported_when_the_document_genuinely_has_none():
+    html = "<html><body><main><h2>Section</h2><p>" + "word " * 80 + "</p></main></body></html>"
+    findings = extract_detect.detect_heading_hierarchy_issues("https://example.com/", html)
+    assert any("no <h1> found" in f.evidence for f in findings)
+
+
+def test_the_document_level_check_does_not_introduce_a_multiple_h1_finding():
+    # The tempting fix -- count raw-DOM h1s instead -- just swaps one false
+    # positive for another: python.org would then be told it has "5 <h1>
+    # tags, should be exactly 1", also wrong, since four are carousel
+    # slides. The >1 check stays scoped to main content.
+    html = (
+        "<html><body><header><h1>Slide one</h1><h1>Slide two</h1><h1>Slide three</h1></header>"
+        "<main><h1>The real title</h1><p>" + "word " * 80 + "</p></main></body></html>"
+    )
+    findings = extract_detect.detect_heading_hierarchy_issues("https://example.com/", html)
+    assert not any("<h1> tags found" in f.evidence for f in findings)

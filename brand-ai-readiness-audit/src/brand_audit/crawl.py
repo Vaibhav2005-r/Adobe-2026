@@ -18,6 +18,7 @@ from xml.etree import ElementTree
 
 import httpx
 from protego import Protego
+from selectolax.parser import HTMLParser
 
 # Documented AI-crawler UAs, per the project's build plan, Part 4. Kept as a flat
 # list (not per-vendor) because REACH-001-style detection needs the exact
@@ -52,6 +53,22 @@ AI_USER_AGENTS = [
 # measured as fetch-only. See Vercel's crawler study, cited in
 # render_detect.detect_empty_shell_pages.
 JS_RENDERING_OR_NON_FETCHING_UAS = frozenset({"Applebot", "Google-Extended"})
+
+# Everything a single URL can plausibly fail with, so one bad URL degrades
+# to a recorded failure instead of ending the crawl.
+#
+# `httpx.HTTPError` alone is not enough: `httpx.InvalidURL` does not
+# subclass it (it is a bare Exception), and a hostname `idna` refuses to
+# encode raises `idna.IDNAError`, which comes from neither package's
+# hierarchy -- it is a `ValueError`. Both escape a bare
+# `except httpx.HTTPError` and both are reachable from a sitemap `<loc>`
+# or an `<a href>`, which are just CMS-authored text. Kept as an explicit
+# tuple rather than `except Exception` so a genuine bug still surfaces as
+# a crash instead of being silently recorded as a fetch failure.
+#
+# Defined here rather than in fetch.py because fetch.py imports from this
+# module, so the dependency only runs one way.
+FETCH_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
 
 DEFAULT_FETCH_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthropic.com/claude-bot)"
 
@@ -172,6 +189,58 @@ def _maybe_gunzip(content: bytes) -> bytes:
     return content
 
 
+async def discover_links_from_homepage(
+    client: httpx.AsyncClient, base_url: str, robots: RobotsPolicy, max_urls: int = 500
+) -> list[str]:
+    """Same-host, robots-allowed links found on the homepage, in a
+    deterministic order.
+
+    The fallback for a site with no sitemap at all. Without it, sitemap
+    discovery returns `[base_url]` and the *entire* audit runs against one
+    page: every downstream stage then reports on a single document, the
+    answerability probe indexes one page's chunks, and `TRUST-*`/`ENGAGE-*`
+    scopes read `1 of 1`. Measured on a 196-site sweep: **39 of 131
+    completed audits (30%) crawled exactly one page**, among them
+    wikipedia.org, python.org, react.dev, rust-lang.org and mit.edu --
+    none of which publish a sitemap, and all of which return 404 for
+    `/sitemap.xml`. Those audits were not wrong, they were nearly empty.
+
+    Deliberately one level deep, homepage only. This is a seed list for
+    the existing deterministic sampler, not a recursive crawler: one
+    extra request, bounded output, no queue, and nothing that could push
+    the run past its own time budget. Same-host only (no subdomains, no
+    off-site), robots-checked per URL like every other request this
+    pipeline makes, and `#fragment`/`?query` stripped so the same page
+    reached three ways doesn't occupy three sample slots.
+
+    Sorted before returning: the sampler's determinism guarantee is only
+    as good as the order of what it samples from, and DOM order would
+    make the corpus depend on the site's own nav markup.
+    """
+    try:
+        resp = await client.get(base_url, timeout=10.0)
+    except FETCH_ERRORS:
+        return []
+    if resp.status_code >= 400:
+        return []
+
+    host = urlparse(str(resp.url)).netloc
+    found: set[str] = set()
+    for node in HTMLParser(resp.text).css("a[href]"):
+        href = (node.attributes.get("href") or "").strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        absolute = urljoin(str(resp.url), href)
+        parsed = urlparse(absolute)
+        if parsed.scheme not in ("http", "https") or parsed.netloc != host:
+            continue
+        clean = parsed._replace(query="", fragment="").geturl()
+        if robots.allowed(clean, DEFAULT_FETCH_UA):
+            found.add(clean)
+
+    return sorted(found)[:max_urls]
+
+
 async def discover_sitemap_urls(
     client: httpx.AsyncClient, base_url: str, robots: RobotsPolicy, max_urls: int = 500
 ) -> tuple[list[str], bool]:
@@ -229,7 +298,14 @@ async def discover_sitemap_urls(
                     urls.append(loc.text.strip())
 
     if not urls:
-        urls = [base_url]
+        # No sitemap anywhere: seed the sampler from the homepage's own
+        # links rather than auditing a single page. `sitemap_fetch_ok`
+        # stays False either way -- REACH-006 still reports the missing
+        # sitemap, which is a real finding; this only stops the *rest* of
+        # the audit from being starved by it.
+        urls = await discover_links_from_homepage(client, base_url, robots, max_urls)
+        if base_url not in urls:
+            urls = [base_url] + urls
     return urls[:max_urls], sitemap_fetch_ok
 
 

@@ -710,3 +710,141 @@ passed, all 8 skills validated, `run_audit.py` produced a valid report in
 3.8s, and the suite ran **230 passed, 1 skipped** (the Playwright module,
 correctly skipped on a bare machine). Nothing in the submitted artifact
 depends on anything outside it.
+
+---
+
+### Post-Day-10 addendum 7 — a 196-site external sweep, and what it actually found
+
+A folder of externally-produced QA material arrived: a 200-site audit
+campaign (196 reports, 131 completed), two independent verification
+passes, and two prioritised remediation documents. As with addendum 4,
+every claim was checked against the code and against live sites before
+anything changed — and the most useful result was again that the
+headline diagnosis was wrong while the symptom was real.
+
+**Already fixed, verified as such (5 of the reports' items).** The
+JSON-LD crash, sitemap namespace/gzip fragility, staleness aggregation,
+ARRIVE running on 0-page crawls, and empty-body handling were all closed
+in addenda 3–4. Re-checked rather than assumed: `extract_json_ld("")`,
+`("   ")`, `("\x00")` and an empty `<script type="application/ld+json">`
+tag all return `[]` cleanly now.
+
+**The "MAJOR" sitemap finding was misdiagnosed — and led to a bigger
+real one.** The report claimed `python.org`, `apache.org`, `react.dev`
+and `mit.edu` "crawled only 1 page despite possessing extensive
+sitemaps", attributing it to the namespace/gzip bug. Checked directly:
+all four return **404 for `/sitemap.xml`** and declare no `Sitemap:` line
+in `robots.txt`. They have no sitemap. `pages_crawled: 1` was the
+documented `[base_url]` fallback behaving exactly as designed, and the
+namespace/gzip fix — a genuine bug, worth having — does nothing for them.
+
+But the symptom was real and much larger than four sites. Counting the
+campaign's own CSV: **39 of 131 completed audits (30%) crawled exactly
+one page** — wikipedia.org, python.org, react.dev, rust-lang.org,
+mit.edu, news.ycombinator.com, excalidraw.com among them. Those audits
+weren't wrong, they were nearly empty: every downstream stage reporting
+on a single document, the answerability probe indexing one page's chunks,
+every scope reading `1 of 1`.
+
+Fixed with `discover_links_from_homepage`: when sitemap discovery yields
+nothing, seed the sampler from the homepage's own links. Deliberately one
+level deep and homepage-only — a seed list for the existing deterministic
+sampler, not a recursive crawler: one extra request, bounded output, no
+queue, nothing that could push a run past its time budget. Same-host
+only, robots-checked per URL, `#fragment`/`?query` stripped so one page
+reached three ways doesn't occupy three sample slots, and sorted before
+returning, since the sampler's determinism guarantee is only as good as
+the order of what it samples from. Live result: python.org 1 → 65 URLs
+discovered, apache.org 1 → 26, react.dev 1 → 23, mit.edu 1 → 17. A full
+`python.org` audit now crawls 12 pages instead of 1.
+
+`sitemap_fetch_ok` stays `False` throughout, so `REACH-006` still reports
+the missing sitemap — a real finding. This only stops the rest of the
+audit from being starved by it.
+
+**Three confirmed false-positive classes, all fixed.**
+
+1. **`EXTRACT-003` reported "no `<h1>` found" on python.org.** Verified
+   live: the page ships **five** `<h1>` elements in its hero carousel and
+   **zero** survive `trafilatura`'s main-content extraction. Scoping to
+   main content is right for the *outline* check (it was itself a Day 4
+   fix for nav-chrome false positives) and wrong for the *existence*
+   check — "this page has no `<h1>`" is a claim about the document, and a
+   boilerplate extractor is not the authority on it. The zero-`h1` issue
+   now fires only when the raw DOM has none either. Deliberately *not* a
+   fallback to counting raw-DOM `h1`s, which would swap one false
+   positive for another: python.org would then be told it has "5 `<h1>`
+   tags, should be exactly 1", also wrong, since four are carousel
+   slides. Confirmed on the live site afterwards, including that the
+   genuine cases survive — `python.org/community/lists/` really does mark
+   eleven section headings as `<h1>`, and `python.org/shell/` really has
+   none anywhere.
+
+2. **`TRUST-008` was measuring markup, not content.** It stripped tags
+   with `re.sub("<[^>]+>", " ", html)`, which removes the *tags* and keeps
+   everything between them — including the entire contents of every
+   `<script>` and `<style>` block. The "numeric claims" being counted were
+   CSS lengths, script constants, inline-JSON ids and timestamps.
+   Measured on python.org: **27** numeric/currency facts from the
+   tag-stripped HTML versus **1** from the visible text, against a
+   threshold of ≥2. Any page carrying JavaScript qualified, which is why
+   it fired on **101 of 196 sites**. Now reads `trafilatura`'s
+   main-content extraction, like every other content-reading detector
+   here.
+
+3. **...and a statistic is a claim, not a number.** Even on visible text,
+   postgresql.org still fired: its homepage carries eleven numbers — 19
+   Beta 3, 18.6, 17.11, 16.15, 15.19, 14.24 — every one a version
+   identifier. So are ports, IPs, process ids in a terminal transcript,
+   and calendar years. Nobody can attribute "PostgreSQL is at 18.6" to a
+   source; it's a label, not a claim. Counting is now restricted to
+   percentages and currency amounts — what the KDD study's "statistics
+   addition" strategy actually refers to — chosen over blocklisting
+   version/port/PID shapes, which is brittle and endless. All four sites
+   the report named (`rust-lang.org`, `postgresql.org`,
+   `fastapi.tiangolo.com`, `python.org`) were re-checked: three now
+   silent. **`fastapi.tiangolo.com` still fires, correctly** — its page
+   really does claim "about 200% to 300%" faster and "about 40%" fewer
+   bugs with no source. That one was a true positive the report had
+   miscounted as noise.
+
+**Two smaller items.** ISO 4217 alphabetic currency codes (`EUR 45`,
+`39 GBP`, `120 USD`) are now extracted alongside symbols — symbol-only
+matching missed every price on a site quoting in codes, which is the norm
+for B2B and cross-border pricing, and a currency fact never extracted is
+also one the render diff can never report as missing. While adding the
+tests, a pre-existing bug surfaced: `₹3,999` normalizes to `3999` while
+the numeric regex independently matches the `999` after the comma, and
+equality-based suppression left that fragment in the numeric set as a
+phantom fact never stated on the page. Now suppressed by substring.
+`ENGAGE-004` was downgraded from `medium` to `low` confidence: it matches
+a vendor script name in the markup and nothing more, cannot tell a
+full-screen modal from a footer bar, and consent SDKs ship on a very
+large share of EU-facing sites that handle them fine — the same honesty
+`TRUST-008` and `ENGAGE-005` already apply to equivalently narrow
+matching. Its title now says a consent overlay "may block" first paint.
+
+**Checked and deliberately not changed.** `ENGAGE-005` fires on 57% of
+sites in the sweep, which looks like an over-trigger, but the one case
+traced end-to-end (thesouledstore.com, addendum 5) was honest: the
+strings "add to cart"/"buy now"/"shop now" are absent from the non-JS
+response entirely. It is already majority-gated and `low` confidence.
+Changing it would need evidence that specific firings are wrong, which
+the sweep does not provide. Also untouched: the reports' `Correction 1/2`
+reference files (`brand_ai_audit/extract/extractor.py`, `json_ld.py`,
+`jstyleson`) that do not exist in this project.
+
+*The committed sample report changed and was regenerated.* `EXTRACT-003`
+dropped from `12/6` to `1/1` on allbirds.com — five of those six were the
+`trafilatura`-stripping false positive; the one that remains is a real
+skip. `sample-report/README.md` says so.
+
+Validation: **251 tests passing** (was 236), including 15 new ones
+covering link discovery (robots-respected, same-host, duplicate
+collapsing, determinism), the `<h1>` document-level check in all three
+directions, and `TRUST-008`'s script/version/percentage cases; three runs
+byte-identical with link discovery in the path; confusion matrix
+unchanged at **precision 1.00 / recall 1.00 / FP-rate 0.00**; manifest
+lint clean; all 8 skills valid. Nothing in this addendum touches the
+handout compliance established in addendum 6 — no new dependency, no new
+manifest key, still read-only and robots-respecting.

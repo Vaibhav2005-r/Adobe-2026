@@ -2,7 +2,7 @@
 
 **7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus**
 
-Audited 2026-09-10 17:02:11.782174+00:00 · 12 pages crawled, 0 rendered · 28.3s
+Audited 2026-09-10 17:23:15.214826+00:00 · 12 pages crawled, 0 rendered · 28.5s
 
 ## Funnel status
 
@@ -30,7 +30,7 @@ Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 sim
 
 ### ③ EXTRACT
 
-- **[LOW] 6 of 12 page(s): heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')** (`EXTRACT-003`, confidence: high, checked 12/affected 6)
+- **[LOW] https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')** (`EXTRACT-003`, confidence: high, checked 1/affected 1)
 
 ### ④ RETRIEVE
 
@@ -40,7 +40,7 @@ Answerability: 5 answerable, 6 partial, 7 ungrounded, 0 unretrievable (of 18 sim
 ### ⑥ ARRIVE
 
 - **[MEDIUM] 3 of 4 page(s): a cold arrival can't tell what this is without the nav** (`ENGAGE-002`, confidence: low, checked 4/affected 3)
-- **[MEDIUM] 4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint** (`ENGAGE-004`, confidence: medium, checked 4/affected 4)
+- **[MEDIUM] 4 of 4 citable page(s) carry a consent/gate overlay that may block first meaningful paint** (`ENGAGE-004`, confidence: low, checked 4/affected 4)
 
 ## Proactive recommendations (no defect found)
 

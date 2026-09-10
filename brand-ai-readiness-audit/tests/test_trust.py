@@ -266,3 +266,45 @@ def test_anchoring_scope_counts_pages_not_the_first_hit():
 
 def test_no_organization_block_at_all_is_not_a_finding():
     assert td.detect_missing_entity_anchoring({"https://example.com/a": "<html><body>x</body></html>"}) is None
+
+
+# --- TRUST-008 measures claims, not markup ----------------------------------
+
+
+def _page(body: str) -> str:
+    return f"<html><body><main><p>{body}</p></main></body></html>"
+
+
+def test_script_and_style_contents_are_not_counted_as_statistics():
+    # The detector stripped tags with a regex, which keeps everything
+    # *between* them -- including the whole contents of <script> and
+    # <style>. Measured on python.org: 27 numeric/currency facts from the
+    # tag-stripped HTML versus 1 from the visible text. With a threshold of
+    # >=2, any page carrying JavaScript qualified.
+    html = (
+        "<html><head><style>.a{width:1200px;margin:40px;top:99px}</style>"
+        '<script>var a={id:12345,ttl:8600,retries:30};</script></head>'
+        "<body><main><p>We build software.</p></main></body></html>"
+    )
+    assert td.detect_low_attribution_density({"https://example.com/a": html}) is None
+
+
+def test_version_numbers_and_ports_are_not_statistics():
+    # postgresql.org's homepage carries eleven numbers -- 19 Beta 3, 18.6,
+    # 17.11, 16.15, 15.19, 14.24 -- every one a version identifier. Nobody
+    # can attribute "PostgreSQL is at 18.6" to a source; it is a label,
+    # not a claim.
+    body = "Releasing 19 Beta 3, 18.6, 17.11, 16.15, 15.19 and 14.24. Serving at http://127.0.0.1:8000 since 2011."
+    assert td.detect_low_attribution_density({"https://example.com/a": _page(body)}) is None
+
+
+def test_unattributed_percentages_still_fire():
+    body = "Teams ship features about 200% to 300% faster and see roughly 40 percent fewer bugs."
+    finding = td.detect_low_attribution_density({"https://example.com/a": _page(body)})
+    assert finding is not None
+    assert finding.taxonomy_id == "TRUST-008"
+
+
+def test_attribution_language_suppresses_the_finding():
+    body = "According to our 2026 benchmark, teams ship about 200% faster with 40 percent fewer bugs."
+    assert td.detect_low_attribution_density({"https://example.com/a": _page(body)}) is None

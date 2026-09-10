@@ -21,6 +21,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from brand_audit.crawl import find_homepage_url  # noqa: E402
+import trafilatura  # noqa: E402
+
 from brand_audit.jsonld import extract_json_ld, walk  # noqa: E402
 from brand_audit.models import (  # noqa: E402
     Artifact,
@@ -371,6 +373,35 @@ _CITATION_PHRASES = (
 )
 
 
+# What counts as a *statistic* for attribution purposes: a percentage or a
+# money amount. Both are quantitative claims someone could, in principle,
+# cite a source for.
+#
+# Bare numbers are not, and counting them is what made this rule noisy.
+# postgresql.org's homepage carries eleven of them -- 19 Beta 3, 18.6,
+# 17.11, 16.15, 15.19, 14.24 -- and every one is a version identifier. So
+# are ports (8000), IPs (127.0.0.1), process ids from a terminal
+# transcript (2248755), and calendar years. Nobody can attribute
+# "PostgreSQL is at 18.6" to a source; it isn't a claim, it's a label.
+# Rather than blocklisting version/port/PID shapes -- brittle, and endless
+# -- this asks the positive question the KDD 2024 study's "statistics
+# addition" strategy actually refers to.
+#
+# Deliberately narrower than "any number", which means a page asserting
+# "12,000 customers in 89 countries" with no source no longer fires. That
+# is a false negative, and the safe direction: this rule ships at LOW
+# confidence and `low` severity precisely because it is a heuristic, and
+# an unfireable rule beats a rule that fires on every page with a
+# changelog.
+_PERCENT_RE = re.compile(r"\b\d+(?:\.\d+)?\s?(?:%|per\s?cent\b|percent\b)", re.IGNORECASE)
+
+
+def _statistic_count(text: str) -> int:
+    from brand_audit.facts import extract_facts
+
+    return len(_PERCENT_RE.findall(text)) + len(extract_facts(text)["currency"])
+
+
 def _has_citation_signal(html: str) -> bool:
     text_lower = html.lower()
     return any(p in text_lower for p in _CITATION_PHRASES)
@@ -384,14 +415,27 @@ def detect_low_attribution_density(pages: dict[str, str]) -> Finding | None:
     gains of "up to 40%", with efficacy varying by domain; their
     complete absence across the sampled corpus is worth flagging as a
     proactive gap, not a defect on any one page."""
-    from brand_audit.facts import extract_facts
-
     pages_with_stats = []
     for url in sorted(pages):
         html = pages[url]
-        text = re.sub(r"<[^>]+>", " ", html)
-        facts = extract_facts(text)
-        if len(facts["numeric"]) + len(facts["currency"]) >= 2 and not _has_citation_signal(html):
+        # Main-content extraction, not a tag-strip regex. `re.sub("<[^>]+>")`
+        # removes the *tags* and keeps everything between them -- which
+        # includes the entire contents of every <script> and <style> block.
+        # So the "numeric claims" being counted were CSS lengths, script
+        # constants, inline-JSON ids and timestamps, none of which a reader
+        # ever sees and none of which anyone could attribute to a source.
+        # Measured on python.org: 27 numeric/currency facts from the
+        # tag-stripped HTML versus 1 from the visible text. With a
+        # threshold of >=2, essentially any page carrying JavaScript
+        # qualified, which is why this rule fired on 101 of 196 sites in a
+        # wild sweep -- a rate that carries almost no information.
+        # trafilatura is what every other content-reading detector here
+        # already uses (EXTRACT-001, ENGAGE-002, ENGAGE-005).
+        text = trafilatura.extract(html) or ""
+        # Citation language is checked against the same visible text, for
+        # the same reason: an "according to" inside a script tag is not
+        # attribution a reader can see.
+        if _statistic_count(text) >= 2 and not _has_citation_signal(text):
             pages_with_stats.append(url)
 
     if not pages_with_stats or len(pages_with_stats) < max(1, len(pages) // 2):

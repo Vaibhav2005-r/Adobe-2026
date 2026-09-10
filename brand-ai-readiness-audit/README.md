@@ -33,7 +33,7 @@ A real report, committed and ready to open: [`sample-report/`](sample-report/)
 (allbirds.com, `report.html` is the one to open in a browser).
 
 ```bash
-python -m pytest tests/ -v                    # 236 tests, no network needed
+python -m pytest tests/ -v                    # 251 tests, no network needed
 python scripts/eval_fixtures.py                # fixture confusion matrix
 ```
 
@@ -363,10 +363,25 @@ The falsification pass has no equivalent in any paper or product found.
   blocking behaviour.** OneTrust/Cookiebot/CookieYes ship on a very large
   share of EU-facing commercial sites, including ones whose banner is a
   small non-blocking footer bar, so this check carries little information
-  on such a site. It's hedged where it can be -- medium confidence, and
-  the title says a consent overlay "can block" first paint rather than
-  that it does -- but confirming actual blocking needs a rendered page,
+  on such a site. It ships at **low** confidence for exactly that reason
+  (downgraded from medium after a 196-site sweep), and its title says a
+  consent overlay "may block" first paint rather than that it does.
+  Confirming actual occlusion needs a rendered page with computed styles,
   which this stage deliberately doesn't require.
+- **Link discovery is one level deep, homepage only.** A site with no
+  sitemap is seeded from the links on its own homepage -- enough to give
+  the sampler a real corpus instead of a single page, but not a recursive
+  crawler. Pages reachable only three clicks in, and pages on sibling
+  subdomains, are not discovered. `wikipedia.org` is the honest worst
+  case: its portal links all point at `en.wikipedia.org` and friends, so
+  the same-host filter leaves one page.
+- **`TRUST-008` counts only percentages and currency amounts.** After a
+  196-site sweep showed it firing on 101 of 196 sites, "statistic" was
+  narrowed to the shapes the KDD study's own strategy refers to. A page
+  asserting "12,000 customers in 89 countries" with no source no longer
+  fires. That's a deliberate false negative: the alternative counted
+  version numbers, ports and process ids as claims someone should have
+  cited.
 - **`ENGAGE-007` measures latency from the auditing machine.** A slow
   local connection, a VPN or packet loss is attributed to the audited
   site. `httpx`'s `Response.elapsed` is the cheap TTFB-adjacent proxy the
@@ -400,7 +415,7 @@ LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
 scripts/eval_fixtures.py        maintainer eval harness -- not a shipped skill
-tests/                          236 tests + local fixture sites (no live network needed)
+tests/                          251 tests + local fixture sites (no live network needed)
 ```
 
 See `skills/ai-visibility-orchestrator/SKILL.md` for the full CLI and

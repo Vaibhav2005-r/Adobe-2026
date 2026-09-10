@@ -24,7 +24,7 @@ correctly stayed silent. That is the detection working in both
 directions, not a gap.
 
 5 findings across three stages on a real, well-known Shopify DTC site:
-`EXTRACT-003` (heading-hierarchy gaps, 6 of the 12 sampled pages),
+`EXTRACT-003` (a heading-hierarchy gap on one page),
 `CHUNK-001` + `CHUNK-003` (buyer-intent queries that don't resolve
 from a single page), `ENGAGE-002` (3 of 4 citable pages don't name the
 brand near the top of their own content -- the deep-link orientation

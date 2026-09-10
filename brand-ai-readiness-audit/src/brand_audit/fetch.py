@@ -11,23 +11,11 @@ from dataclasses import dataclass
 import httpx
 
 from .artifact_store import FetchRecord
-from .crawl import DEFAULT_FETCH_UA
+from .crawl import DEFAULT_FETCH_UA, FETCH_ERRORS  # noqa: F401 -- re-exported for callers
 
 DEFAULT_CONCURRENCY = 8
 DEFAULT_PER_HOST_DELAY_S = 0.25  # politeness delay between requests to the same host
 
-# Everything a single URL can plausibly fail with, so one bad URL degrades
-# to a FetchOutcome-with-error instead of ending the crawl.
-#
-# `httpx.HTTPError` alone is not enough: `httpx.InvalidURL` does not
-# subclass it (it is a bare Exception), and a hostname `idna` refuses to
-# encode raises `idna.IDNAError`, which comes from neither package's
-# hierarchy -- it is a `ValueError`. Both escape a bare
-# `except httpx.HTTPError` and both are reachable from a sitemap `<loc>`,
-# which is just CMS-authored text. Kept as an explicit tuple rather than
-# `except Exception` so a genuine bug in this module still surfaces as a
-# crash instead of being silently recorded as a fetch failure.
-FETCH_ERRORS = (httpx.HTTPError, httpx.InvalidURL, ValueError)
 
 
 @dataclass

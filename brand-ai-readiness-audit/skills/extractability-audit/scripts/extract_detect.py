@@ -284,7 +284,22 @@ def detect_heading_hierarchy_issues(url: str, html: str) -> list[Finding]:
     h1_count = sum(1 for level, _ in ordered if level == 1)
     issues = []
     if h1_count == 0 and ordered:
-        issues.append("no <h1> found")
+        # ...but only if the *document* has none either. "This page has no
+        # h1" is a claim about the page, and trafilatura is not the
+        # authority on that -- it strips hero banners and carousels as
+        # boilerplate, which is exactly where a lot of sites put their h1.
+        # python.org ships five `<h1>` elements in its hero carousel and
+        # zero survive main-content extraction, so this reported "no <h1>
+        # found" on one of the most-visited technical sites on the web.
+        #
+        # Note what this does *not* do: it doesn't fall back to counting
+        # raw-DOM h1s, which would just swap one false positive for
+        # another (python.org would then be told it has "5 <h1> tags,
+        # should be exactly 1" -- also wrong, since four of them are
+        # carousel slides). The document-level check answers only
+        # "does an h1 exist at all", and stays silent when one does.
+        if not HTMLParser(html).css("h1"):
+            issues.append("no <h1> found")
     elif h1_count > 1:
         issues.append(f"{h1_count} <h1> tags found (should be exactly 1)")
 

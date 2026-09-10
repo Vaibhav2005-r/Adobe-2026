@@ -42,3 +42,32 @@ def test_normalize_currency_value():
     assert normalize_currency_value("105") == 105.0
     assert normalize_currency_value("₹24,999") == 24999.0
     assert normalize_currency_value("not a number") is None
+
+
+# --- ISO 4217 alphabetic currency codes -------------------------------------
+
+
+def test_iso_currency_codes_are_extracted_on_either_side_of_the_number():
+    # Symbol-only matching missed every price on a site quoting in codes
+    # rather than glyphs -- the norm for B2B, cross-border and
+    # multi-currency pricing. A currency fact never extracted here is also
+    # one the render diff can never report as missing from the non-JS fetch.
+    facts = extract_facts("Plans are EUR 45, 39 GBP, 120 USD, $49.00, ₹3,999 and ¥5000.")
+    assert facts["currency"] == {"EUR 45", "39 GBP", "120 USD", "$49.00", "₹3,999", "¥5000"}
+
+
+def test_currency_codes_normalize_to_a_comparable_number():
+    assert normalize_currency_value("EUR 45") == 45.0
+    assert normalize_currency_value("39 GBP") == 39.0
+
+
+def test_a_thousands_separated_price_does_not_leave_a_phantom_numeric_fact():
+    # "₹3,999" normalizes to "3999", while the numeric regex independently
+    # matches the "999" after the comma. Equality-based suppression left
+    # that fragment in the numeric set as a fact that was never stated.
+    facts = extract_facts("The kettle is ₹3,999.")
+    assert facts["numeric"] == set()
+
+
+def test_a_bare_word_is_not_mistaken_for_a_currency_code():
+    assert extract_facts("We shipped 20 units and 30 crates.")["currency"] == set()

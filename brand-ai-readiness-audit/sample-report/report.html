@@ -100,7 +100,7 @@ a { color: inherit; }
 <body>
 <div class="report">
   <h1>AI Visibility Audit &mdash; allbirds.com</h1>
-  <p class="meta">Audited 2026-09-10T17:02:11.782174+00:00 &middot; schema 1.0.0</p>
+  <p class="meta">Audited 2026-09-10T17:23:15.214826+00:00 &middot; schema 1.0.0</p>
   <p class="headline">7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus</p>
   <p class='meta'>First funnel stage the brand falls out at: <strong>③ EXTRACT</strong></p>
   <div class="funnel"><div class="funnel-box funnel-status-pass"><div class="funnel-label">① REACH</div><div class="funnel-status">pass</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-skipped"><div class="funnel-label">② RENDER</div><div class="funnel-status">skipped</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial funnel-box-highlight"><div class="funnel-label">③ EXTRACT</div><div class="funnel-status">partial</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial"><div class="funnel-label">④ RETRIEVE</div><div class="funnel-status">partial</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-pass"><div class="funnel-label">⑤ CITE</div><div class="funnel-status">pass</div></div><div class="funnel-arrow">&rarr;</div><div class="funnel-box funnel-status-partial"><div class="funnel-label">⑥ ARRIVE</div><div class="funnel-status">partial</div></div></div>
@@ -124,13 +124,13 @@ a { color: inherit; }
       reproduced
     </span>
   </div>
-  <h3 class="finding-title">6 of 12 page(s): heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)</h3>
-  <div class="finding-section"><strong>Evidence</strong><p>https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [&quot;heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)&quot;]; https://www.allbirds.com/products/mens-wool-runners-true-black: heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 3, 2, 2]; issues: [&#x27;no &lt;h1&gt; found&#x27;]; https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard: heading sequence: [3, 3, 3, 3, 3, 3, 3, 2, 2, 3, 2, 2, 3]; issues: [&#x27;no &lt;h1&gt; found&#x27;]; https://www.allbirds.com/products/womens-tree-runner-go-blizzard-vivid-red: heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2]; issues: [&#x27;no &lt;h1&gt; found&#x27;]; https://www.allbirds.com/products/mens-strider-medium-grey: heading sequence: [3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 2, 2, 3]; issues: [&#x27;no &lt;h1&gt; found&#x27;] (+1 more)</p></div>
+  <h3 class="finding-title">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)</h3>
+  <div class="finding-section"><strong>Evidence</strong><p>heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [&quot;heading level skip: jumped to h3 after h1 (text: &#x27;Notify me when back in stock&#x27;)&quot;]</p></div>
   <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>Extraction/chunking pipelines commonly use heading structure to infer a document&#x27;s outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.</p></div>
-  <div class="finding-section"><strong>Scope</strong><p>checked 12, affected 6</p></div>
+  <div class="finding-section"><strong>Scope</strong><p>checked 1, affected 1</p></div>
   
   
-  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div><div class="artifact"><a href="https://www.allbirds.com/products/mens-wool-runners-true-black" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-wool-runners-true-black</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div><div class="artifact"><a href="https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/mens-dasher-nz-natural-black-blizzard</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
+  <div class="finding-section"><strong>Artifacts</strong><div class="artifact"><a href="https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush" target="_blank" rel="noopener noreferrer">https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush</a><div class="artifact-selector"><code>h1, h2, h3, h4, h5, h6</code></div></div></div>
   <div class="suggested-action">
     <strong>Suggested action</strong> (impact: low, effort: low)
     <p>Use exactly one &lt;h1&gt; per page and avoid heading-level skips.</p>
@@ -207,12 +207,12 @@ a { color: inherit; }
   <div class="finding-header">
     <span class="badge badge-severity-medium">medium</span>
     <span class="badge badge-taxonomy">ENGAGE-004</span>
-    <span class="badge badge-confidence">confidence: medium</span>
+    <span class="badge badge-confidence">confidence: low</span>
     <span class="badge badge-reproduced-true">
       reproduced
     </span>
   </div>
-  <h3 class="finding-title">4 of 4 citable page(s) carry a consent/gate overlay that can block first meaningful paint</h3>
+  <h3 class="finding-title">4 of 4 citable page(s) carry a consent/gate overlay that may block first meaningful paint</h3>
   <div class="finding-section"><strong>Evidence</strong><p>https://www.allbirds.com/pages/design-system: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/mens-wool-runners-true-black: &#x27;onetrust&#x27; signature present; https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: &#x27;onetrust&#x27; signature present</p></div>
   <div class="finding-section"><strong>Why this breaks retrieval/citation</strong><p>An AI-referred visitor arrives already mid-task expecting to confirm a specific answer. A consent wall, age gate, or modal between them and the page&#x27;s own content adds friction a search visitor (who browsed in cold) tolerates but an already-informed visitor doesn&#x27;t -- and if it blocks first paint, it can hide the very answer the assistant cited.</p></div>
   <div class="finding-section"><strong>Scope</strong><p>checked 4, affected 4, page class citable</p></div>
@@ -251,7 +251,7 @@ a { color: inherit; }
   <p>
     marketplace 1.0.0 &middot; rule pack 2026.08.28 &middot;
     12 pages crawled, 0 rendered &middot;
-    28.3s &middot; seed sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c
+    28.5s &middot; seed sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c
   </p>
   <p>stages completed: reach, extract, retrieve, cite, arrive</p>
   <details><summary>Degradations</summary><ul><li>render_stage_skipped_by_flag</li></ul></details>
