@@ -260,3 +260,63 @@ def test_a_fully_blocked_site_publishes_no_answerability_matrix(tmp_path):
         "answerable": 0, "partial": 0, "ungrounded": 0, "unretrievable": 0
     }
     assert report["summary"]["ai_readiness"]["retrieve"] == "skipped"
+
+
+# --- stratified sampling: the pages a buyer asks about ----------------------
+
+
+def _stratified(urls, max_pages=6, **kw):
+    return stratified_sample(urls, sample_seed_for("example.com"), max_pages=max_pages, **kw)
+
+
+def test_the_homepage_is_always_sampled():
+    # Entity detection reads the homepage to decide what the brand is
+    # called, and all 18 buyer-intent queries are built from that name. A
+    # live ghost.org audit drew 25 theme and integration pages with no
+    # homepage among them, so the detector fell back to a /resources/ page
+    # title and named the brand "Ghost Resources" -- every query then asked
+    # about a company that does not exist.
+    urls = [f"https://example.com/themes/t{i}" for i in range(200)] + ["https://example.com/"]
+    assert "https://example.com/" in _stratified(urls)
+
+
+def test_high_value_page_classes_get_a_guaranteed_slot():
+    # Same run recommended publishing a pricing page to a brand whose
+    # /pricing/ page was in the sitemap the whole time, merely unsampled.
+    urls = [f"https://example.com/themes/t{i}" for i in range(200)] + [
+        "https://example.com/",
+        "https://example.com/pricing/",
+        "https://example.com/contact/",
+        "https://example.com/about/",
+    ]
+    picked = _stratified(urls, max_pages=6)
+    for expected in ("/pricing/", "/contact/", "/about/"):
+        assert any(expected in u for u in picked), f"{expected} should have a guaranteed slot, got {picked}"
+
+
+def test_stratification_respects_max_pages_and_never_duplicates():
+    urls = ["https://example.com/", "https://example.com/pricing/", "https://example.com/about/"] + [
+        f"https://example.com/p{i}" for i in range(50)
+    ]
+    picked = _stratified(urls, max_pages=3)
+    assert len(picked) == 3
+    assert len(set(picked)) == 3
+
+
+def test_a_pinned_url_still_outranks_the_homepage():
+    pinned = "https://example.com/index/some-article/"
+    picked = _stratified([pinned, "https://example.com/", "https://example.com/pricing/"], pinned=pinned)
+    assert picked[0] == pinned
+    assert "https://example.com/" in picked  # ...and the homepage is still there
+
+
+def test_stratified_sampling_is_deterministic():
+    urls = ["https://example.com/", "https://example.com/pricing/"] + [
+        f"https://example.com/p{i}" for i in range(80)
+    ]
+    assert _stratified(urls, max_pages=10) == _stratified(urls, max_pages=10)
+
+
+def test_a_site_with_no_classifiable_pages_still_fills_the_sample():
+    urls = [f"https://example.com/x/{i}" for i in range(100)]
+    assert len(_stratified(urls, max_pages=10)) == 10

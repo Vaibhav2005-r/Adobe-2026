@@ -17,6 +17,7 @@ import http.server
 import sys
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -183,7 +184,22 @@ def test_sitemap_shapes_all_yield_their_urls(sitemap_server, path, expected):
     # page, with nothing anywhere reporting that discovery had failed.
     urls, fetch_ok = _discover(sitemap_server, path)
     assert fetch_ok is True
-    assert urls == [expected]
+    # Membership, not equality: the origin is also always a candidate (see
+    # test_the_homepage_is_always_a_candidate below), and these fixture
+    # sitemaps deliberately point at a different host, so the homepage is
+    # never among the URLs the sitemap itself declares. What this test is
+    # about is whether the sitemap's own <loc> survived parsing.
+    assert expected in urls
+
+
+def test_the_homepage_is_always_a_candidate_even_when_the_sitemap_omits_it(sitemap_server):
+    # ghost.org's sitemap index yields 500 theme and integration URLs
+    # before it ever reaches `/`, so the homepage was not merely
+    # unsampled -- it was never in the pool the sampler chose from. Entity
+    # detection reads the homepage to decide what the brand is called, and
+    # every generated buyer-intent query is built from that name.
+    urls, _ = _discover(sitemap_server, "/ns.xml")
+    assert any(urlparse(u).path in ("", "/") for u in urls)
 
 
 def test_genuinely_unparseable_sitemap_still_falls_back_honestly(sitemap_server):

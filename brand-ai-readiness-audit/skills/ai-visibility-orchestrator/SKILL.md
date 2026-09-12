@@ -58,9 +58,13 @@ credentials, no site access. Optional flags bound the run:
 python scripts/run_audit.py <site> [--max-pages 40] [--out report.json]
 ```
 
-1. **Discover and sample.** Fetch `robots.txt`, discover the sitemap,
-   and take a deterministic stratified sample (fixed seed derived from
-   the domain, so the same site always yields the same page set).
+1. **Discover and sample.** Fetch `robots.txt`, discover the sitemap
+   (falling back to homepage link discovery when a site publishes none),
+   and take a deterministic stratified sample: the URL the caller named
+   if they named one, then the homepage, then one page from each of
+   pricing / contact / about / docs / product, then the rest by seeded
+   URL-hash rank. Fixed seed derived from the domain, so the same site
+   always yields the same page set.
 2. **Run the six funnel stages in order**, each gated on the corpus
    that survived the ones before it: ① `crawl-reach-audit`,
    ② `render-gap-audit`, ③ `extractability-audit`,

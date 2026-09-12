@@ -914,3 +914,108 @@ no-duplication, and an end-to-end assertion that a fully blocked site
 publishes no matrix. Confusion matrix unchanged at precision 1.00 /
 recall 1.00 / FP-rate 0.00; manifest lint clean; all 8 skills valid;
 handout compliance untouched.
+
+---
+
+### Post-Day-10 addendum 9 — running a site that isn't blocked, and what it exposed
+
+Every recent live run had been against a WAF-blocked target, which only
+ever exercises stage 1. Ran a full six-stage audit against `ghost.org`
+(25 pages, 67s, server-rendered, real sitemap) to see the pipeline work
+end to end. It did — and produced two wrong outputs, both traceable to
+the same unimplemented piece of the build plan.
+
+**The detected brand name was "Ghost Resources".** All eighteen
+buyer-intent queries read "How much does Ghost Resources cost?", "Is
+Ghost Resources a legitimate company?" — a company that does not exist.
+Every answerability outcome in the report was therefore measured against
+the wrong entity, which does not degrade the crown-jewel stage so much as
+invalidate it.
+
+Two causes, stacked:
+
+- `detect_entity` accepted a JSON-LD `Organization` name from *any*
+  sampled page, ranked above the homepage's own `<title>`. ghost.org
+  publishes no `Organization` block on its homepage but does on
+  `/resources/`, where it names itself "Ghost Resources". This is exactly
+  the hijack the function's own docstring already documents for the
+  *title* path (allbirds.com's "Design System" page, Day 6) arriving
+  through the JSON-LD door instead — the fix went in for one door and not
+  the other. Precedence is now homepage-first throughout: homepage
+  JSON-LD, homepage `<title>`, homepage `<h1>`, *then* any other page's
+  JSON-LD, then the domain-derived floor. ghost.org now resolves to
+  **"Ghost"** from its homepage title, and a corpus without the homepage
+  still falls back to the subpage name rather than the domain.
+- ...but the deeper cause is that **the homepage was never sampled, and
+  was never even a candidate**. ghost.org's sitemap index yields 500
+  theme and integration URLs before it reaches `/`, and
+  `discover_sitemap_urls` caps at 500. So the homepage was not merely
+  unlucky in the hash draw; it was absent from the pool. The origin is
+  now always appended as a candidate.
+
+**The report recommended publishing a pricing page to a company that has
+one.** "No page answers pricing-intent questions" was derived from a
+25-page sample containing no pricing page — `ghost.org/pricing/` was in
+the sitemap the whole time, merely never drawn. Same for contact.
+
+Root cause for both: `stratified_sample` was never stratified. The build
+plan's runtime-budget section specifies "stratified deterministic sample
+— home, top nav L1, pricing/plans, product/service class xN, about,
+contact, docs/help", and the function's own docstring had said since Day
+3 that page classification "is a stage-1 detector concern layered on top
+of this once page classification exists". The note outlived the excuse by
+six days and a full evaluation campaign.
+
+Now genuinely stratified, in priority order: the URL the caller named
+(addendum 8), the homepage, one page from each of pricing / contact /
+about / docs / product, then the rest by seeded hash rank. Determinism is
+unchanged — every slot is filled *from* the hash-ranked candidates.
+
+*Why a uniform sample was the wrong tool, stated once:* it is the right
+instrument for estimating a proportion and the wrong one for finding
+specific pages. This pipeline's crown-jewel stage asks pricing-, contact-
+and trust-intent questions by name, so a sample that happens to miss the
+pricing page makes those queries unanswerable **by construction**, and
+the proactive layer then confidently recommends building what already
+exists. That is not a tuning problem; it is a category error about what
+the sample is for.
+
+Result on the same site, same command:
+
+```
+                        before            after
+entity                  "Ghost Resources" "Ghost"
+ungrounded queries      5                 3
+false pricing rec       yes               gone
+false contact rec       yes               gone
+```
+
+The committed sample report improved for the same reason and was
+regenerated: allbirds.com's contact-intent recommendation is gone, since
+`/contact/` now gets a guaranteed slot rather than depending on the hash
+draw.
+
+*One thing left alone, noted honestly:* `TRUST-005`'s finding title still
+reads "Ghost Resources has no sameAs links". That detector reports the
+name on the `Organization` block it actually examined, and the block
+genuinely is called that — the finding is accurate about the block even
+though the title reads like a claim about the brand. Fixing it means
+threading the resolved entity into stage 5, which is a composition change
+rather than a bug fix, and the finding is not wrong.
+
+*Four tests were changed rather than added.*
+`test_sitemap_shapes_all_yield_their_urls` asserted `urls == [expected]`,
+which encoded "the returned list contains exactly what the sitemap
+declared". The origin is now always a candidate, so that equality no
+longer holds while the thing the test is actually about — did the
+sitemap's own `<loc>` survive parsing — is unchanged. Rewritten as a
+membership assertion, with a new sibling test pinning the homepage
+guarantee explicitly.
+
+Validation: **265 tests passing** (was 255), including nine new ones for
+stratification (homepage always sampled, class slots guaranteed,
+`max_pages` respected, no duplication, pinned-URL precedence,
+determinism, and a no-classifiable-pages fallback) and entity precedence
+in all three directions. Three runs byte-identical; confusion matrix
+unchanged at precision 1.00 / recall 1.00 / FP-rate 0.00; manifest lint
+clean; all 8 skills valid; handout compliance untouched.

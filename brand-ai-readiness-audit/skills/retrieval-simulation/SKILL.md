@@ -98,6 +98,24 @@ passed, and only because a brand name is the one token that survives
 translation. Same contract as a missing Playwright in stage 2: skip the
 measurement, suppress the findings, record the degradation, never guess.
 
+## Entity detection is homepage-first
+
+Every one of the 18 buyer-intent queries is built from the detected brand
+name, so a wrong name does not degrade the probe -- it invalidates it.
+Precedence is therefore homepage-first throughout: the homepage's own
+JSON-LD `Organization` name, then its `<title>`, then its `<h1>`, then an
+`Organization` name from any other sampled page, then a domain-derived
+floor.
+
+Two real hijacks motivated that ordering, arriving through different
+doors. `allbirds.com` (Day 6) never sampled `/` at all, and falling back
+to "whichever sampled page sorts first" landed on a page whose `<title>`
+is literally "Design System". `ghost.org` (later) publishes no
+`Organization` JSON-LD on its homepage but does on `/resources/`, where it
+names itself **"Ghost Resources"** -- so a live audit asked "How much does
+Ghost Resources cost?" eighteen times over. Both are legitimate pages
+being read as the brand.
+
 ## Status
 
 Implemented in `scripts/retrieve_detect.py`, with chunking (`Chunk`,

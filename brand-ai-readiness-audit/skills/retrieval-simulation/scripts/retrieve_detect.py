@@ -102,11 +102,17 @@ def _domain_derived_name(homepage_url: str | None) -> str | None:
 
 
 def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Entity:
-    """Derive the brand's entity + category from the site itself --
-    JSON-LD Organization first (most reliable), then the homepage's own
-    <title>, then its <h1>, then a domain-derived name. Checked in
-    deterministic order (sorted URLs) so the result doesn't depend on
-    dict/crawl ordering."""
+    """Derive the brand's entity + category from the site itself.
+
+    Precedence, homepage-first throughout: the homepage's own JSON-LD
+    `Organization` name, then its `<title>`, then its `<h1>`, then an
+    `Organization` name from any other sampled page, then a
+    domain-derived name. Checked in deterministic order (sorted URLs) so
+    the result doesn't depend on dict/crawl ordering.
+
+    Homepage-first is the whole point. Every one of the 18 buyer-intent
+    queries is built from this name, so a wrong name doesn't degrade the
+    answerability probe -- it invalidates it."""
     # Two passes over every JSON-LD node, not return-on-first-match:
     # the organization name and the category signal are often on
     # *different* nodes (an Organization plus a sibling Product in the
@@ -116,7 +122,11 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
     # Organization+Product shape -- would stop scanning before ever
     # reaching a category-bearing node that comes later in walk order.
     category = "business"
-    org_name: str | None = None
+    homepage_org_name: str | None = None
+    any_page_org_name: str | None = None
+    # Resolved up front so the JSON-LD pass can tell the homepage's own
+    # Organization block apart from a subpage's.
+    resolved_homepage = find_homepage_url(pages, homepage_url)
     for url in sorted(pages):
         for block in extract_json_ld(pages[url]):
             for node in walk(block):
@@ -125,10 +135,27 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
                 for t in types:
                     if t in _CATEGORY_BY_TYPE:
                         category = _CATEGORY_BY_TYPE[t]
-                if org_name is None and any(t in ("Organization", "LocalBusiness") for t in types) and node.get("name"):
-                    org_name = str(node["name"])
-    if org_name is not None:
-        return Entity(name=org_name, category=category, source="json-ld")
+                if any(t in ("Organization", "LocalBusiness") for t in types) and node.get("name"):
+                    if url == resolved_homepage and homepage_org_name is None:
+                        homepage_org_name = str(node["name"])
+                    elif any_page_org_name is None:
+                        any_page_org_name = str(node["name"])
+
+    # The homepage's own Organization block is authoritative for "what is
+    # this brand called". A subpage's is not, and the difference is not
+    # theoretical: ghost.org publishes no Organization JSON-LD on its
+    # homepage but does on `/resources/`, where it names itself **"Ghost
+    # Resources"** -- so a live audit generated all eighteen buyer-intent
+    # queries about a company that does not exist ("How much does Ghost
+    # Resources cost?"), and every answerability outcome was measured
+    # against the wrong entity.
+    #
+    # This is the same hijack the homepage-title path below already
+    # documents (allbirds.com's "Design System" page), arriving through
+    # the JSON-LD door instead. Fixed the same way: homepage signals
+    # first, an arbitrary page's signals only as a later fallback.
+    if homepage_org_name is not None:
+        return Entity(name=homepage_org_name, category=category, source="json-ld")
 
     # find_homepage_url matches by normalized root path, not exact string
     # equality against `homepage_url` -- see its docstring (brand_audit.
@@ -147,7 +174,6 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
     # purely because of alphabetical sort order. A domain-derived name
     # is a strictly safer floor: it can't be hijacked by an unrelated
     # subpage's own title the way "guess from any sampled page" could.
-    resolved_homepage = find_homepage_url(pages, homepage_url)
     if resolved_homepage is not None:
         html = pages[resolved_homepage]
         title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
@@ -162,6 +188,14 @@ def detect_entity(pages: dict[str, str], homepage_url: str | None = None) -> Ent
             text = re.sub(r"<[^>]+>", "", h1_match.group(1)).strip()
             if text:
                 return Entity(name=text, category=category, source="h1")
+
+    # Only now: an Organization block from some other sampled page. Ranked
+    # below every homepage signal for the reason above, but above the
+    # domain-derived floor -- most sites repeat the same Organization on
+    # every page, so when the homepage itself wasn't sampled this is
+    # usually still the right name.
+    if any_page_org_name is not None:
+        return Entity(name=any_page_org_name, category=category, source="json-ld")
 
     domain_name = _domain_derived_name(homepage_url)
     if domain_name:

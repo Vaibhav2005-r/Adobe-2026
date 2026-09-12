@@ -1,6 +1,6 @@
 {
   "site": "allbirds.com",
-  "audited_at": "2026-09-10T17:23:15.214826Z",
+  "audited_at": "2026-09-12T14:07:45.874109Z",
   "schema_version": "1.0.0",
   "run_manifest": {
     "marketplace_version": "1.0.0",
@@ -8,7 +8,7 @@
     "pages_crawled": 12,
     "pages_rendered": 0,
     "sample_seed": "sha256:62badbc8be1dabc4b1f2bca75fb0e7297c82d551cd6c60d86a65188c700b653c",
-    "duration_s": 28.50845841699629,
+    "duration_s": 37.533238165982766,
     "stages_completed": [
       "reach",
       "extract",
@@ -21,10 +21,10 @@
     ]
   },
   "summary": {
-    "total_findings": 5,
+    "total_findings": 7,
     "critical": 0,
     "high": 0,
-    "medium": 4,
+    "medium": 6,
     "low": 1,
     "ai_readiness": {
       "reach": "pass",
@@ -35,27 +35,35 @@
       "arrive": "partial"
     },
     "answerability": {
-      "answerable": 5,
-      "partial": 6,
-      "ungrounded": 7,
+      "answerable": 7,
+      "partial": 5,
+      "ungrounded": 6,
       "unretrievable": 0
     },
-    "headline": "7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus"
+    "headline": "6 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus"
   },
   "findings": [
     {
       "id": "F-EXTRACT-001",
-      "title": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading hierarchy issue(s) -- heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')",
+      "title": "2 of 12 page(s): heading hierarchy issue(s) -- no <h1> found",
       "severity": "low",
       "stage": "extract",
       "taxonomy_id": "EXTRACT-003",
       "scope": {
-        "checked": 1,
-        "affected": 1,
+        "checked": 12,
+        "affected": 2,
         "page_class": null
       },
-      "evidence": "heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [\"heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')\"]",
+      "evidence": "https://www.allbirds.com/pages/help: heading sequence: [4]; issues: ['no <h1> found']; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: heading sequence: [1, 3, 3, 3, 3, 3, 3, 3]; issues: [\"heading level skip: jumped to h3 after h1 (text: 'Notify me when back in stock')\"]",
       "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": "h1, h2, h3, h4, h5, h6",
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
         {
           "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
           "http_status": null,
@@ -68,7 +76,7 @@
       "confidence": "high",
       "verification": {
         "reproduced": true,
-        "method": "re-fetched https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush with a different UA (GPTBot); status was None, now 200",
+        "method": "re-fetched https://www.allbirds.com/pages/help with a different UA (GPTBot); status was None, now 200",
         "contradicting_signals": []
       },
       "impact_mechanism": "Extraction/chunking pipelines commonly use heading structure to infer a document's outline and segment content. An ambiguous or broken outline risks content getting attributed to the wrong section, or chunk boundaries landing in the wrong place -- invisible to a human skimming the styled page, very visible to anything parsing the DOM structure.",
@@ -83,23 +91,31 @@
         "implementation": [
           "Restructure headings to a single h1 with no level skips"
         ],
-        "verification_step": "curl -s https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
+        "verification_step": "curl -s https://www.allbirds.com/pages/help | grep -oE '<h[1-6]' -- should start with h1 and never skip a level",
         "rationale_ref": "references/taxonomy.md#extract-003"
       }
     },
     {
       "id": "F-CHUNK-001",
-      "title": "7 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus",
+      "title": "6 of 18 buyer-intent queries are unanswerable from the AI-reachable corpus",
       "severity": "medium",
       "stage": "retrieve",
       "taxonomy_id": "CHUNK-001",
       "scope": {
         "checked": 18,
-        "affected": 7,
+        "affected": 6,
         "page_class": null
       },
-      "evidence": "[pricing] 'How much does Allbirds cost?' -> ungrounded; [comparison] 'How does Allbirds compare to competitors?' -> ungrounded; [trust] 'Is Allbirds a legitimate company?' -> ungrounded; [trust] 'What do customers say about Allbirds?' -> ungrounded; [trust] 'Are there reviews of Allbirds?' -> ungrounded; [contact] 'How do I contact Allbirds?' -> ungrounded; [contact] 'Where is Allbirds located?' -> ungrounded",
+      "evidence": "[pricing] 'How much does Allbirds cost?' -> ungrounded; [comparison] 'How does Allbirds compare to competitors?' -> ungrounded; [trust] 'Is Allbirds a legitimate company?' -> ungrounded; [trust] 'What do customers say about Allbirds?' -> ungrounded; [trust] 'Are there reviews of Allbirds?' -> ungrounded; [contact] 'Where is Allbirds located?' -> ungrounded",
       "artifacts": [
+        {
+          "url": "https://www.allbirds.com/",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
         {
           "url": "https://www.allbirds.com/pages/design-system",
           "http_status": null,
@@ -115,20 +131,12 @@
           "html_only_extract": null,
           "rendered_extract": null,
           "sha256": null
-        },
-        {
-          "url": "https://www.allbirds.com/pages/finding-the-best-womens-flats",
-          "http_status": null,
-          "selector": null,
-          "html_only_extract": null,
-          "rendered_extract": null,
-          "sha256": null
         }
       ],
       "confidence": "high",
       "verification": {
         "reproduced": true,
-        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "method": "re-fetched https://www.allbirds.com/ with a different UA (GPTBot); status was None, now 200",
         "contradicting_signals": []
       },
       "impact_mechanism": "Even where a page nominally contains this information somewhere on the site, it isn't retrievable the way an assistant's own retrieval pipeline would actually find it -- the query's own terms don't surface a chunk that grounds an answer. This is the direct, outcome-anchored metric that determines answer visibility, not an intermediate proxy.",
@@ -138,7 +146,6 @@
         "Is Allbirds a legitimate company?",
         "What do customers say about Allbirds?",
         "Are there reviews of Allbirds?",
-        "How do I contact Allbirds?",
         "Where is Allbirds located?"
       ],
       "suggested_action": {
@@ -158,17 +165,25 @@
     },
     {
       "id": "F-CHUNK-002",
-      "title": "6 buyer-intent queries can only be answered by combining facts from different pages",
+      "title": "5 buyer-intent queries can only be answered by combining facts from different pages",
       "severity": "medium",
       "stage": "retrieve",
       "taxonomy_id": "CHUNK-003",
       "scope": {
         "checked": 18,
-        "affected": 6,
+        "affected": 5,
         "page_class": null
       },
       "evidence": "[pricing] \"What is the price of Allbirds's product?\"; [comparison] 'What makes Allbirds different from other product options?'; [comparison] 'Is Allbirds better than alternatives?'; [capability] 'What features does Allbirds offer?'; [capability] \"What are the specifications of Allbirds's product?\"",
       "artifacts": [
+        {
+          "url": "https://www.allbirds.com/",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
         {
           "url": "https://www.allbirds.com/pages/design-system",
           "http_status": null,
@@ -184,20 +199,12 @@
           "html_only_extract": null,
           "rendered_extract": null,
           "sha256": null
-        },
-        {
-          "url": "https://www.allbirds.com/pages/finding-the-best-womens-flats",
-          "http_status": null,
-          "selector": null,
-          "html_only_extract": null,
-          "rendered_extract": null,
-          "sha256": null
         }
       ],
       "confidence": "medium",
       "verification": {
         "reproduced": true,
-        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "method": "re-fetched https://www.allbirds.com/ with a different UA (GPTBot); status was None, now 200",
         "contradicting_signals": []
       },
       "impact_mechanism": "The answer exists in the corpus but only by combining facts from two or more distinct pages -- e.g. one page's specification plus another page's price. Real retrieval pipelines rarely perform this cross-page join at query time, so a PARTIAL outcome here is more fragile than a same-page multi-chunk assembly.",
@@ -206,8 +213,7 @@
         "What makes Allbirds different from other product options?",
         "Is Allbirds better than alternatives?",
         "What features does Allbirds offer?",
-        "What are the specifications of Allbirds's product?",
-        "What is Allbirds's customer support?"
+        "What are the specifications of Allbirds's product?"
       ],
       "suggested_action": {
         "summary": "Co-locate the related facts on a single page rather than relying on a reader (or retriever) to combine two pages.",
@@ -225,35 +231,94 @@
     },
     {
       "id": "F-ENGAGE-001",
-      "title": "3 of 4 page(s): a cold arrival can't tell what this is without the nav",
+      "title": "6 of 12 citable answers sit in the back half of their page",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-001",
+      "scope": {
+        "checked": 12,
+        "affected": 6,
+        "page_class": null
+      },
+      "evidence": "[identity] 'What is Allbirds?' -> https://www.allbirds.com/pages/help (70% into the page); [identity] 'What does Allbirds do?' -> https://www.allbirds.com/pages/help (70% into the page); [identity] 'Tell me about Allbirds' -> https://www.allbirds.com/pages/help (70% into the page); [pricing] \"What is the price of Allbirds's product?\" -> https://www.allbirds.com/pages/help (70% into the page); [capability] \"What can Allbirds's product do?\" -> https://www.allbirds.com/pages/help (70% into the page)",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "medium",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/pages/help with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "An AI-referred visitor arrives deep-linked and mid-task, already given a partial answer by the assistant -- they scan to confirm it, not to read the page fresh. An answer buried past the page's own midpoint asks that visitor to re-find what they were already told, which is exactly the friction a search visitor (who chose to click in cold) tolerates but an AI-referred one doesn't.",
+      "affected_queries": [
+        "What is Allbirds?",
+        "What does Allbirds do?",
+        "Tell me about Allbirds",
+        "What is the price of Allbirds's product?",
+        "What can Allbirds's product do?",
+        "What are the specifications of Allbirds's product?"
+      ],
+      "suggested_action": {
+        "summary": "Move the cited answer, or a direct one-line restatement of it, higher in the page's main content.",
+        "priority": "medium",
+        "impact": "medium",
+        "effort": "low",
+        "confidence": "medium",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Lead the relevant section with the direct answer before any narrative framing"
+        ],
+        "verification_step": "Re-run the audit and confirm the query's top_chunk_position_ratio drops",
+        "rationale_ref": "references/taxonomy.md#engage-001"
+      }
+    },
+    {
+      "id": "F-ENGAGE-002",
+      "title": "2 of 3 page(s): a cold arrival can't tell what this is without the nav",
       "severity": "medium",
       "stage": "arrive",
       "taxonomy_id": "ENGAGE-002",
       "scope": {
-        "checked": 4,
-        "affected": 3,
+        "checked": 3,
+        "affected": 2,
         "page_class": "citable"
       },
-      "evidence": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: 'Allbirds' appears on the page but not in its first 500 characters; https://www.allbirds.com/products/mens-wool-runners-true-black: 'Allbirds' appears on the page but not in its first 500 characters; https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: 'Allbirds' appears on the page but not in its first 500 characters",
+      "evidence": "https://www.allbirds.com/pages/help: 'Allbirds' appears on the page but not in its first 500 characters; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: 'Allbirds' appears on the page but not in its first 500 characters",
       "artifacts": [
         {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
           "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
-          "http_status": null,
-          "selector": null,
-          "html_only_extract": null,
-          "rendered_extract": null,
-          "sha256": null
-        },
-        {
-          "url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
-          "http_status": null,
-          "selector": null,
-          "html_only_extract": null,
-          "rendered_extract": null,
-          "sha256": null
-        },
-        {
-          "url": "https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey",
           "http_status": null,
           "selector": null,
           "html_only_extract": null,
@@ -264,7 +329,7 @@
       "confidence": "low",
       "verification": {
         "reproduced": true,
-        "method": "re-fetched https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush with a different UA (GPTBot); status was None, now 200",
+        "method": "re-fetched https://www.allbirds.com/pages/help with a different UA (GPTBot); status was None, now 200",
         "contradicting_signals": []
       },
       "impact_mechanism": "An AI-referred visitor lands on this exact page, never the homepage, with zero prior context about the brand -- they don't see the nav or logo as onboarding, because they don't browse to get here. If the page's own main content never names the brand near the top, a cold arrival has nothing on the page itself confirming what company this is or that the assistant's citation landed somewhere legitimate.",
@@ -285,16 +350,16 @@
     },
     {
       "id": "F-ENGAGE-004",
-      "title": "4 of 4 citable page(s) carry a consent/gate overlay that may block first meaningful paint",
+      "title": "3 of 3 citable page(s) carry a consent/gate overlay that may block first meaningful paint",
       "severity": "medium",
       "stage": "arrive",
       "taxonomy_id": "ENGAGE-004",
       "scope": {
-        "checked": 4,
-        "affected": 4,
+        "checked": 3,
+        "affected": 3,
         "page_class": "citable"
       },
-      "evidence": "https://www.allbirds.com/pages/design-system: 'onetrust' signature present; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: 'onetrust' signature present; https://www.allbirds.com/products/mens-wool-runners-true-black: 'onetrust' signature present; https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey: 'onetrust' signature present",
+      "evidence": "https://www.allbirds.com/pages/design-system: 'onetrust' signature present; https://www.allbirds.com/pages/help: 'onetrust' signature present; https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush: 'onetrust' signature present",
       "artifacts": [
         {
           "url": "https://www.allbirds.com/pages/design-system",
@@ -305,7 +370,7 @@
           "sha256": null
         },
         {
-          "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+          "url": "https://www.allbirds.com/pages/help",
           "http_status": null,
           "selector": null,
           "html_only_extract": null,
@@ -313,7 +378,7 @@
           "sha256": null
         },
         {
-          "url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+          "url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
           "http_status": null,
           "selector": null,
           "html_only_extract": null,
@@ -343,6 +408,58 @@
         "verification_step": "Re-run the audit and confirm the page no longer matches a known overlay signature",
         "rationale_ref": "references/taxonomy.md#engage-004"
       }
+    },
+    {
+      "id": "F-ENGAGE-005",
+      "title": "2 of 3 citable pages have no recognizable next step for the visitor",
+      "severity": "medium",
+      "stage": "arrive",
+      "taxonomy_id": "ENGAGE-005",
+      "scope": {
+        "checked": 3,
+        "affected": 2,
+        "page_class": "citable"
+      },
+      "evidence": "https://www.allbirds.com/pages/design-system; https://www.allbirds.com/pages/help",
+      "artifacts": [
+        {
+          "url": "https://www.allbirds.com/pages/design-system",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        },
+        {
+          "url": "https://www.allbirds.com/pages/help",
+          "http_status": null,
+          "selector": null,
+          "html_only_extract": null,
+          "rendered_extract": null,
+          "sha256": null
+        }
+      ],
+      "confidence": "low",
+      "verification": {
+        "reproduced": true,
+        "method": "re-fetched https://www.allbirds.com/pages/design-system with a different UA (GPTBot); status was None, now 200",
+        "contradicting_signals": []
+      },
+      "impact_mechanism": "A visitor who arrives mid-task with their question already answered needs the next action available on the landing page itself -- requiring a navigation hunt to find it loses exactly the visitor this stage is scoped to, since they have no accumulated site context (unlike a browsing visitor) to know where to look.",
+      "affected_queries": [],
+      "suggested_action": {
+        "summary": "Add an explicit next-step action (contact, buy, sign up, demo) directly on the citable pages, not just in global nav.",
+        "priority": "medium",
+        "impact": "low",
+        "effort": "low",
+        "confidence": "low",
+        "stage_unblocked": "arrive",
+        "implementation": [
+          "Add a clear CTA near the end of the main content on each affected page"
+        ],
+        "verification_step": "Re-run the audit and confirm fewer pages appear in this finding's scope",
+        "rationale_ref": "references/taxonomy.md#engage-005"
+      }
     }
   ],
   "observations": [],
@@ -359,25 +476,6 @@
         "stage_unblocked": "retrieve",
         "implementation": [
           "Review the comparison queries in the answerability matrix -- they are the literal phrasings to answer",
-          "State each answer directly in text, not only in marketing narrative or an image",
-          "Keep the subject and the fact in the same section so they land in the same retrieval chunk"
-        ],
-        "verification_step": "Re-run the audit and confirm at least one query in this intent class becomes 'answerable'",
-        "rationale_ref": "references/taxonomy.md#chunk-001"
-      }
-    },
-    {
-      "title": "No page answers contact-intent questions",
-      "rationale": "All 3 simulated contact-intent queries came back unanswerable from the AI-reachable corpus (outcomes: partial, ungrounded). No defect was detected on any individual page -- the gap is that no page exists that would say how to get in touch or where the business is in a form retrieval can surface. An assistant asked this will cite whoever does have such a page, which is usually a competitor or an aggregator.",
-      "suggested_action": {
-        "summary": "Publish a page that directly answers contact-intent questions in the buyer's own phrasing.",
-        "priority": "low",
-        "impact": "medium",
-        "effort": "medium",
-        "confidence": "medium",
-        "stage_unblocked": "retrieve",
-        "implementation": [
-          "Review the contact queries in the answerability matrix -- they are the literal phrasings to answer",
           "State each answer directly in text, not only in marketing narrative or an image",
           "Keep the subject and the fact in the same section so they land in the same retrieval chunk"
         ],
@@ -405,7 +503,7 @@
       }
     },
     {
-      "title": "6 queries are one edit away from being citable",
+      "title": "5 queries are one edit away from being citable",
       "rationale": "These queries resolved as PARTIAL: the facts needed are present in the corpus, but only by assembling them across chunks rather than from one self-contained passage. Real retrieval pipelines do this assembly unreliably, so a PARTIAL is fragile rather than safe. Because the content already exists, these are the lowest-effort upgrades available -- no new page required. Affected: [pricing] \"What is the price of Allbirds's product?\"; [comparison] 'What makes Allbirds different from other product options?'; [comparison] 'Is Allbirds better than alternatives?'; [capability] 'What features does Allbirds offer?'; [capability] \"What are the specifications of Allbirds's product?\"",
       "suggested_action": {
         "summary": "Co-locate each partially-answered fact into a single self-contained passage.",
@@ -429,33 +527,33 @@
       "query": "What is Allbirds?",
       "intent": "identity",
       "outcome": "answerable",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "What does Allbirds do?",
       "intent": "identity",
       "outcome": "answerable",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "Tell me about Allbirds",
       "intent": "identity",
       "outcome": "answerable",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "How much does Allbirds cost?",
       "intent": "pricing",
       "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": false,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "What are Allbirds's prices?",
@@ -469,23 +567,23 @@
       "query": "What is the price of Allbirds's product?",
       "intent": "pricing",
       "outcome": "partial",
-      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "How does Allbirds compare to competitors?",
       "intent": "comparison",
       "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": false,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "What makes Allbirds different from other product options?",
       "intent": "comparison",
       "outcome": "partial",
-      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
       "top_chunk_position_ratio": 0.0
     },
@@ -493,7 +591,7 @@
       "query": "Is Allbirds better than alternatives?",
       "intent": "comparison",
       "outcome": "partial",
-      "top_chunk_url": "https://www.allbirds.com/products/womens-tree-runner-nz-medium-grey",
+      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
       "citable": true,
       "top_chunk_position_ratio": 0.0
     },
@@ -509,17 +607,17 @@
       "query": "What can Allbirds's product do?",
       "intent": "capability",
       "outcome": "answerable",
-      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "What are the specifications of Allbirds's product?",
       "intent": "capability",
       "outcome": "partial",
-      "top_chunk_url": "https://www.allbirds.com/products/anytime-ankle-sock-blizzard-sienna-blush",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "Is Allbirds a legitimate company?",
@@ -533,39 +631,39 @@
       "query": "What do customers say about Allbirds?",
       "intent": "trust",
       "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": false,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "Are there reviews of Allbirds?",
       "intent": "trust",
       "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": false,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "How do I contact Allbirds?",
       "intent": "contact",
-      "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
-      "citable": false,
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
+      "citable": true,
       "top_chunk_position_ratio": 0.0
     },
     {
       "query": "Where is Allbirds located?",
       "intent": "contact",
       "outcome": "ungrounded",
-      "top_chunk_url": "https://www.allbirds.com/pages/design-system",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": false,
-      "top_chunk_position_ratio": 0.0
+      "top_chunk_position_ratio": 0.7018498367791077
     },
     {
       "query": "What is Allbirds's customer support?",
       "intent": "contact",
-      "outcome": "partial",
-      "top_chunk_url": "https://www.allbirds.com/products/mens-wool-runners-true-black",
+      "outcome": "answerable",
+      "top_chunk_url": "https://www.allbirds.com/pages/help",
       "citable": true,
       "top_chunk_position_ratio": 0.0
     }

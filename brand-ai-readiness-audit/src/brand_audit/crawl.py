@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import re
 import time
 import zlib
 from dataclasses import dataclass, field
@@ -304,8 +305,16 @@ async def discover_sitemap_urls(
         # sitemap, which is a real finding; this only stops the *rest* of
         # the audit from being starved by it.
         urls = await discover_links_from_homepage(client, base_url, robots, max_urls)
-        if base_url not in urls:
-            urls = [base_url] + urls
+
+    # The homepage is always a candidate, even when a large sitemap
+    # already filled the cap. ghost.org's sitemap index yields 500 theme
+    # and integration URLs before it ever reaches `/`, so the homepage was
+    # not merely unsampled -- it was never in the pool the sampler chose
+    # from. That matters more than one page's worth of coverage: entity
+    # detection reads the homepage to decide what the brand is called, and
+    # every generated buyer-intent query is built from that name.
+    if not any(_is_homepage(u) for u in urls):
+        urls = [base_url] + urls
     return urls[:max_urls], sitemap_fetch_ok
 
 
@@ -343,26 +352,65 @@ def sample_seed_for(domain: str) -> str:
     return "sha256:" + hashlib.sha256(domain.encode("utf-8")).hexdigest()
 
 
+# Page classes worth guaranteeing a slot, in priority order. Matched on the
+# URL path, which is the only signal available before anything is fetched.
+#
+# These are not arbitrary: they are the classes the *answerability probe*
+# asks about. The buyer-intent query bank has pricing, contact and trust
+# intents, so a sample that happens to contain no pricing page makes those
+# queries unanswerable by construction -- and the proactive layer then
+# recommends publishing a pricing page to a brand that already has one.
+_PAGE_CLASS_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("pricing", re.compile(r"/(pricing|plans?|price|subscribe|upgrade)(/|$)", re.I)),
+    ("contact", re.compile(r"/(contact|support|help|customer-service)(/|$)", re.I)),
+    ("about", re.compile(r"/(about|company|team|who-we-are|our-story)(/|$)", re.I)),
+    ("docs", re.compile(r"/(docs?|documentation|guides?|faq|knowledge-?base)(/|$)", re.I)),
+    ("product", re.compile(r"/(products?|features?|solutions?|services?)(/|$)", re.I)),
+]
+
+
+def _is_homepage(url: str) -> bool:
+    return urlparse(url).path in ("", "/")
+
+
+def _page_class(url: str) -> str | None:
+    path = urlparse(url).path
+    for name, pattern in _PAGE_CLASS_PATTERNS:
+        if pattern.search(path):
+            return name
+    return None
+
+
 def stratified_sample(
     urls: list[str], seed: str, max_pages: int = 40, *, pinned: str | None = None
 ) -> list[str]:
-    """Deterministic sample via seeded URL-hash tie-break.
+    """Deterministic, page-class-stratified sample.
 
-    Full page-class stratification (home / pricing / product xN / about /
-    contact / docs / blog, per the build plan's runtime-budget section) is
-    a stage-1 detector concern layered on top of this once page
-    classification exists (Day 3). This function guarantees the
-    determinism property the rest of the pipeline depends on: given the
-    same `urls` and `seed`, the output is always byte-identical.
+    Order of guarantees, each filled from the hash-ranked candidates so the
+    result stays byte-identical for the same inputs:
 
-    `pinned` is always included, first, and never displaced by the cap.
-    It carries the URL the user actually asked about: pointing the tool at
-    `https://example.com/index/some-article/` and having it audit fifteen
-    *other* pages of example.com -- never that one -- is the wrong answer
-    to the question that was asked, however deterministic the sample is.
-    Found on a real run against a specific openai.com article, where the
-    report's evidence named fifteen unrelated URLs and not the requested
-    page. Pinning stays deterministic: same inputs, same output.
+      1. `pinned` -- the URL the caller explicitly named, if any.
+      2. The homepage. It is the single highest-value page in a brand
+         audit: entity detection reads its JSON-LD `Organization` name,
+         `<title>` and `<h1>` to decide *what the brand is called*, and
+         every one of the 18 generated buyer-intent queries is built from
+         that name.
+      3. One page from each class in `_PAGE_CLASS_PATTERNS`.
+      4. Everything else by seeded URL-hash rank, until `max_pages`.
+
+    Steps 2 and 3 are the build plan's "stratified deterministic sample --
+    home, top nav L1, pricing/plans, product/service class xN, about,
+    contact, docs/help". They were deferred on Day 3 with a note in this
+    docstring saying page classification didn't exist yet, and the note
+    outlived the excuse. A live audit of ghost.org showed the cost: the
+    hash-ranked 25-page sample drew theme and integration pages only, with
+    no homepage and no pricing page, so (a) entity detection fell back to
+    a `/resources/` page title and named the brand **"Ghost Resources"**,
+    making all 18 queries ask about a company that does not exist, and
+    (b) the report recommended publishing a pricing page to a brand whose
+    `/pricing/` page was in the sitemap the whole time, merely unsampled.
+    A uniform random sample is the right tool for estimating a proportion
+    and the wrong one for finding the specific pages a buyer asks about.
     """
     deduped = sorted(set(urls))  # sort first so hash tie-break is the only
     # source of ordering -- set() iteration order is not guaranteed stable
@@ -371,11 +419,22 @@ def stratified_sample(
     def rank(url: str) -> str:
         return hashlib.sha256((seed + "|" + url).encode("utf-8")).hexdigest()
 
-    if pinned is None:
-        return sorted(deduped, key=rank)[:max_pages]
+    ranked = sorted(deduped, key=rank)
+    picked: list[str] = []
+    seen: set[str] = set()
 
-    rest = sorted((u for u in deduped if u != pinned), key=rank)
-    return [pinned] + rest[: max(0, max_pages - 1)]
+    def take(url: str | None) -> None:
+        if url is not None and url not in seen and len(picked) < max_pages:
+            picked.append(url)
+            seen.add(url)
+
+    take(pinned)
+    take(next((u for u in ranked if _is_homepage(u)), None))
+    for name, _ in _PAGE_CLASS_PATTERNS:
+        take(next((u for u in ranked if u not in seen and _page_class(u) == name), None))
+    for url in ranked:
+        take(url)
+    return picked
 
 
 class BudgetManager:

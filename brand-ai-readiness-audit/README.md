@@ -33,7 +33,7 @@ A real report, committed and ready to open: [`sample-report/`](sample-report/)
 (allbirds.com, `report.html` is the one to open in a browser).
 
 ```bash
-python -m pytest tests/ -v                    # 255 tests, no network needed
+python -m pytest tests/ -v                    # 265 tests, no network needed
 python scripts/eval_fixtures.py                # fixture confusion matrix
 ```
 
@@ -368,6 +368,11 @@ The falsification pass has no equivalent in any paper or product found.
   consent overlay "may block" first paint rather than that it does.
   Confirming actual occlusion needs a rendered page with computed styles,
   which this stage deliberately doesn't require.
+- **The sample is stratified, but shallowly.** The homepage and one page
+  from each of pricing / contact / about / docs / product get a
+  guaranteed slot; the rest is seeded URL-hash rank. A site whose pricing
+  lives at a path none of those patterns match (`/plans-and-billing/`
+  matches, `/how-much/` doesn't) still relies on the hash draw.
 - **Link discovery is one level deep, homepage only.** A site with no
   sitemap is seeded from the links on its own homepage -- enough to give
   the sampler a real corpus instead of a single page, but not a recursive
@@ -415,7 +420,7 @@ LICENSE                        MIT
 skills/                        the 8 skills (see Composition above)
 src/brand_audit/                shared Pydantic models, crawl core, chunking, BM25, severity function
 scripts/eval_fixtures.py        maintainer eval harness -- not a shipped skill
-tests/                          255 tests + local fixture sites (no live network needed)
+tests/                          265 tests + local fixture sites (no live network needed)
 ```
 
 See `skills/ai-visibility-orchestrator/SKILL.md` for the full CLI and

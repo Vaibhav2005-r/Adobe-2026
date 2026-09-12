@@ -225,3 +225,48 @@ def test_answerability_matrix_is_byte_identical_across_two_runs(tmp_path):
 
     assert report_a == report_b
     assert len(report_a["answerability_matrix"]) == 18
+
+
+# --- entity detection is homepage-first -------------------------------------
+
+
+def _org(name: str) -> str:
+    return (
+        '<html><head><title>Untitled</title>'
+        f'<script type="application/ld+json">{{"@type":"Organization","name":"{name}"}}</script>'
+        "</head><body><p>x</p></body></html>"
+    )
+
+
+def test_a_subpage_organization_block_does_not_outrank_the_homepage_title():
+    # ghost.org publishes no Organization JSON-LD on its homepage but does
+    # on /resources/, where it names itself "Ghost Resources". A live audit
+    # generated all 18 buyer-intent queries about a company that does not
+    # exist ("How much does Ghost Resources cost?"), so every answerability
+    # outcome was measured against the wrong entity.
+    pages = {
+        "https://example.com/": "<html><head><title>Acme: the best widgets</title></head><body><p>x</p></body></html>",
+        "https://example.com/resources/": _org("Acme Resources"),
+    }
+    entity = rd.detect_entity(pages, "https://example.com")
+    assert entity.name == "Acme"
+    assert entity.source == "title"
+
+
+def test_the_homepages_own_organization_block_still_wins():
+    pages = {
+        "https://example.com/": _org("Acme Inc"),
+        "https://example.com/resources/": _org("Acme Resources"),
+    }
+    entity = rd.detect_entity(pages, "https://example.com")
+    assert entity.name == "Acme Inc"
+    assert entity.source == "json-ld"
+
+
+def test_a_subpage_organization_is_still_used_when_the_homepage_was_not_sampled():
+    # Ranked below every homepage signal, but above the domain-derived
+    # floor -- most sites repeat the same Organization on every page.
+    pages = {"https://example.com/resources/": _org("Acme Resources")}
+    entity = rd.detect_entity(pages, "https://example.com")
+    assert entity.name == "Acme Resources"
+    assert entity.source == "json-ld"
