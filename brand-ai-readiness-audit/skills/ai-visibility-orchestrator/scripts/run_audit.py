@@ -127,7 +127,7 @@ async def run_reach_stage(
         sitemap_urls = [pinned] + sitemap_urls
     sample = stratified_sample(sitemap_urls, seed, max_pages=max_pages, pinned=pinned)
 
-    # Robots-respecting is a hard constraint (CLAUDE.md), not a courtesy:
+    # Robots-respecting is a hard constraint of this project, not a courtesy:
     # only fetch URLs our own crawl UA is actually allowed to. The
     # REACH-001 detector below still checks the *full* sample for named
     # AI-bot rules -- that's a robots.txt rule lookup, not a fetch, so it

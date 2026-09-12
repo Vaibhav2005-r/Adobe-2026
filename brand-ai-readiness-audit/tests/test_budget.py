@@ -1,5 +1,5 @@
 """Proves the time-budget watchdog is actually enforced, not just
-instantiated and ignored -- CLAUDE.md's "<5 minute runtime... hard
+instantiated and ignored -- the project's "<5 minute runtime... hard
 watchdog" hard constraint, checked end-to-end.
 """
 

@@ -6,7 +6,7 @@
 > brand falls out, proves it with the two extractions side by side, and
 > then tries to prove itself wrong before it reports anything.
 
-A Claude Skills marketplace that audits a website's visibility to AI
+An Agent Skills marketplace that audits a website's visibility to AI
 assistants (ChatGPT, Claude, Perplexity, and the rest). Deterministic,
 read-only, robots-respecting, and runs on a bare machine in under five
 minutes.

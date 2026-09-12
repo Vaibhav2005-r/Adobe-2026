@@ -1,7 +1,7 @@
 """Proves the crawler actually respects robots.txt Disallow rules when
 fetching -- not just that RobotsPolicy.allowed() exists and is correct in
 isolation, but that run_audit.py actually calls it before making a
-request. This is CLAUDE.md's "read-only, robots-respecting" hard
+request. This is the project's "read-only, robots-respecting" hard
 constraint, checked end-to-end rather than trusted from code inspection.
 
 The fixture's sitemap.xml deliberately lists a page robots.txt disallows
